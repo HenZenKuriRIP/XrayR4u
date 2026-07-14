@@ -1,0 +1,229 @@
+# ============================================================================
+# XrayR4u 配置文件模版 v0.9.12
+# ============================================================================
+# 内置 Xray-core v1.260327.0 (REALITY / XTLS-Vision / VLESS)
+# 配置文件需放置在 /etc/XrayR/config.yml
+# 或在启动时通过 --config 参数指定路径
+#
+# 仅对接 K2Board (wyx2685/V2Board) UniProxy 接口
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# 全局日志配置
+# ---------------------------------------------------------------------------
+Log:
+  # 日志级别: none(关闭), error, warning, info, debug
+  Level: warning
+
+  # 访问日志路径 (记录所有连接)，留空则不记录
+  AccessPath: # /etc/XrayR/access.log
+
+  # 错误日志路径 (记录错误信息)，留空则不记录
+  ErrorPath: # /etc/XrayR/error.log
+
+# ---------------------------------------------------------------------------
+# DNS 配置文件路径
+#   自定义 DNS 策略，参考: https://xtls.github.io/config/dns.html
+#   留空则使用系统默认 DNS
+# ---------------------------------------------------------------------------
+DnsConfigPath: # /etc/XrayR/dns.json
+
+# ---------------------------------------------------------------------------
+# 路由配置文件路径
+#   自定义路由规则，参考: https://xtls.github.io/config/routing.html
+#   留空则使用默认路由
+# ---------------------------------------------------------------------------
+RouteConfigPath: # /etc/XrayR/route.json
+
+# ---------------------------------------------------------------------------
+# 自定义入站配置文件路径
+#   用于添加面板管理之外的额外入站规则 (如 Socks5 代理)
+#   参考: https://xtls.github.io/config/inbound.html
+# ---------------------------------------------------------------------------
+InboundConfigPath: # /etc/XrayR/custom_inbound.json
+
+# ---------------------------------------------------------------------------
+# 自定义出站配置文件路径
+#   用于添加面板管理之外的额外出站规则
+#   参考: https://xtls.github.io/config/outbound.html
+# ---------------------------------------------------------------------------
+OutboundConfigPath: # /etc/XrayR/custom_outbound.json
+
+# ---------------------------------------------------------------------------
+# 连接控制配置
+# ---------------------------------------------------------------------------
+ConnetionConfig:
+  # 握手超时时间 (秒)，建议 4-8
+  Handshake: 4
+
+  # 连接空闲超时 (秒)，超过此时长无数据传输则关闭连接
+  ConnIdle: 30
+
+  # 仅上行超时 (秒)
+  UplinkOnly: 2
+
+  # 仅下行超时 (秒)
+  DownlinkOnly: 4
+
+  # 每个连接内部缓存大小 (kB)
+  BufferSize: 64
+
+# ---------------------------------------------------------------------------
+# 节点配置列表 (支持多节点)
+# ---------------------------------------------------------------------------
+Nodes:
+  # ========================= 示例 1: VLESS + REALITY + Vision (推荐) =========================
+  - PanelType: "V2board"
+    ApiConfig:
+      # [必填] 面板 API 地址
+      ApiHost: "https://your-panel.com"
+
+      # [必填] 面板通信密钥 (token)
+      ApiKey: "your-api-token"
+
+      # [必填] 面板中的节点 ID
+      NodeID: 1
+
+      # [必填] 节点类型: Vless (UniProxy 接口)
+      NodeType: Vless
+
+      # [可选] API 请求超时时间 (秒)，默认 5
+      Timeout: 30
+
+      # [可选] 是否启用 REALITY 协议
+      # REALITY 无需 TLS 证书，窃取目标网站证书实现防探测
+      # 启用后自动使用 VLESS + REALITY + xtls-rprx-vision
+      # 面板端需同步配置 REALITY 参数 (serverNames, privateKey, shortIds 等)
+      EnableReality: true
+
+      # [可选] 节点全局速度限制 (Mbps)，0 = 不限速
+      SpeedLimit: 0
+
+      # [可选] 每用户设备连接数限制，0 = 不限制
+      DeviceLimit: 0
+
+      # [可选] 本地审计规则文件路径，每行一个正则表达式
+      RuleListPath: # /etc/XrayR/rulelist
+
+    ControllerConfig:
+      # [可选] 监听 IP 地址，默认 127.0.0.1，公网部署应设为 0.0.0.0
+      ListenIP: 0.0.0.0
+
+      # [可选] 发送数据的 IP，默认 127.0.0.1，多 IP 服务器可指定出口 IP
+      SendIP: 0.0.0.0
+
+      # [可选] 数据同步周期 (秒)，默认 60
+      UpdatePeriodic: 60
+
+      # [可选] 是否启用自定义 DNS
+      EnableDNS: false
+
+      # [可选] DNS 解析策略: AsIs, UseIP, UseIPv4, UseIPv6
+      DNSType: AsIs
+
+      # [可选] 是否禁用流量上报
+      DisableUploadTraffic: false
+
+      # [可选] 是否禁用审计规则获取
+      DisableGetRule: false
+
+      # [可选] 是否禁用节点状态上报 (CPU/内存/磁盘/运行时间)
+      DisableReportNodeStatus: false
+
+      # [可选] 是否启用 PROXY Protocol (仅 TCP 和 WebSocket 下生效)
+      EnableProxyProtocol: false
+
+      # [可选] 是否禁用数据包嗅探
+      DisableSniffing: false
+
+      # [可选] 是否启用 VLESS Fallback
+      EnableFallback: false
+
+      # [可选] Fallback 配置
+      FallBackConfigs:
+        - SNI: ""
+          Alpn: ""
+          Path: ""
+          Dest: 80
+          ProxyProtocolVer: 0
+
+      # REALITY 模式无需证书配置
+      # TLS 模式需要以下证书配置:
+      # CertConfig:
+      #   CertMode: file
+      #   CertDomain: "node.your-domain.com"
+      #   CertFile: /etc/XrayR/cert/node.crt
+      #   KeyFile: /etc/XrayR/cert/node.key
+
+  # ========================= 示例 2: VLESS + TLS + Vision =========================
+  # - PanelType: "V2board"
+  #   ApiConfig:
+  #     ApiHost: "https://your-panel.com"
+  #     ApiKey: "your-api-token"
+  #     NodeID: 2
+  #     NodeType: Vless
+  #     EnableReality: false
+  #   ControllerConfig:
+  #     ListenIP: 0.0.0.0
+  #     UpdatePeriodic: 60
+  #     CertConfig:
+  #       CertMode: dns
+  #       CertDomain: "node.your-domain.com"
+  #       Provider: alidns
+  #       Email: "your-email@example.com"
+  #       DNSEnv:
+  #         ALICLOUD_ACCESS_KEY: "your-key"
+  #         ALICLOUD_SECRET_KEY: "your-secret"
+
+  # ========================= 示例 3: VLESS + 无 TLS (内网/测试) =========================
+  # - PanelType: "V2board"
+  #   ApiConfig:
+  #     ApiHost: "http://192.168.1.100"
+  #     ApiKey: "your-api-token"
+  #     NodeID: 3
+  #     NodeType: Vless
+  #     EnableReality: false
+  #   ControllerConfig:
+  #     ListenIP: 0.0.0.0
+  #     UpdatePeriodic: 60
+  #     CertConfig:
+  #       CertMode: none
+
+  # ========================= 示例 4: AnyTLS + TLS =========================
+  # AnyTLS 协议节点示例，需要单独在面板中注册一个 NodeType = "anytls" 的节点。
+  # Padding 方案用于流量混淆，未配置时使用内置默认方案。
+  # Fallback 用于抗 GFW 主动探测：非法连接被代理到真实 HTTPS 服务器，
+  # 使 AnyTLS 端口行为与正常网站完全不可区分（强烈推荐配置）。
+  # - PanelType: "V2board"
+  #   ApiConfig:
+  #     ApiHost: "https://your-panel.com"
+  #     ApiKey: "your-api-token"
+  #     NodeID: 4
+  #     NodeType: anytls
+  #   ControllerConfig:
+  #     ListenIP: 0.0.0.0
+  #     UpdatePeriodic: 60
+  #     # 抗主动探测 Fallback: 非法连接转发到此地址（必配！）
+  #     # 指向本机 nginx/caddy 的 HTTPS 端口，如 127.0.0.1:8443
+  #     AnyTLSFallback: "127.0.0.1:8443"
+  #     # 自定义 padding 方案（可选，不填则用默认方案）。
+  #     # 格式: stop=N 控制前 N 个包填充; N=min-max 定义第 N 个包大小范围;
+  #     # c 表示不拆分继续写。逗号分隔同序号的多段。
+  #     AnyTLSPaddingScheme: |
+  #       stop=8
+  #       0=30-30
+  #       1=100-400
+  #       2=400-500,c,500-1000,c,500-1000,c,500-1000,c,500-1000
+  #       3=9-9,500-1000
+  #       4=500-1000
+  #       5=500-1000
+  #       6=500-1000
+  #       7=500-1000
+  #     CertConfig:
+  #       CertMode: dns
+  #       CertDomain: "anytls.your-domain.com"
+  #       Provider: alidns
+  #       Email: "your-email@example.com"
+  #       DNSEnv:
+  #         ALICLOUD_ACCESS_KEY: "your-key"
+  #         ALICLOUD_SECRET_KEY: "your-secret"

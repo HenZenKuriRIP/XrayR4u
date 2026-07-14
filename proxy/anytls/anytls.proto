@@ -1,0 +1,12 @@
+syntax = "proto3";
+package xray.proxy.anytls;
+option go_package = "github.com/HenZenKuriRIP/XrayR4u/proxy/anytls";
+
+message Config {
+  bytes padding_scheme = 1;
+  // fallback_addr is the TCP address of a real TLS/HTTPS server (e.g.
+  // "127.0.0.1:8443") to which unauthenticated connections are proxied. This
+  // makes the AnyTLS port indistinguishable from a normal HTTPS endpoint under
+  // GFW active probing. When empty, unauthenticated connections are rejected.
+  string fallback_addr = 2;
+}

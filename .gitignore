@@ -1,0 +1,26 @@
+# Build artifacts
+/XrayR
+/XrayR.exe
+**/XrayR
+!**/XrayR/
+/dist/
+/build/
+/release/
+*.test
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs & local runtime
+*.log
+
+# ACME / TLS material (never commit private keys)
+common/legocmd/cert/accounts/
+common/legocmd/cert/certificates/
+*.key
+*.pem
+*.crt
