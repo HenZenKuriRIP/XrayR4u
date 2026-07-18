@@ -13,8 +13,9 @@
 
 ### 依赖项
 
-- **Xray-core**: 已内嵌 v1.260327.0，无需单独安装。支持 VLESS 前向安全、REALITY 无证书防探测、XTLS-Vision 流控、uTLS 浏览器指纹伪装
-- **证书**: REALITY 模式无需证书。TLS 模式如使用 Let's Encrypt 自动申请，需确保域名已解析到服务器
+- **Xray-core**: 已内嵌 **v26.7.11**，无需单独安装。支持 VLESS + REALITY + Vision、TLS + XHTTP（CDN）、VLESS Encryption / REALITY 后量子、AnyTLS
+- **证书**: REALITY 模式无需证书。TLS / CDN 源站需配置 CertConfig；Let's Encrypt 需域名解析到服务器
+- **面板对接**: 见 [deploy/K2BOARD_INTEGRATION.md](deploy/K2BOARD_INTEGRATION.md)
 
 ---
 
@@ -23,8 +24,7 @@
 ### 2.1 一键脚本安装 (推荐)
 
 ```bash
-# 使用第三方一键安装脚本
-bash <(curl -Ls https://raw.githubusercontent.com/missuo/XrayR-V2Board/main/install.sh)
+bash <(curl -sSL https://raw.githubusercontent.com/HenZenKuriRIP/XrayR4u/main/deploy/install.sh)
 ```
 
 脚本会自动完成：
@@ -382,12 +382,34 @@ ApiConfig:
 | `privateKey` | 服务端临时私钥 (xray x25519 生成) | 运行 `xray x25519` 获取 |
 | `shortIds` | 短 ID 列表，客户端必须携带其一 | `["abc123", "def456"]` |
 | `dest` | 回退目标地址 | `"www.microsoft.com:443"` |
+| `min_client_ver` | 可选，面板下发的最低客户端版本 | `"1.8.0"` |
+| `mldsa65_seed` | 可选，REALITY ML-DSA-65 后量子签名 seed | `xray mldsa65` 的 Seed |
+| 顶层 `decryption` | 可选，VLESS Encryption 服务端串 | 默认 `none` |
+
+**节点端 REALITY / VLESS 解析优先级（config.yml 非空优先）：**
+
+| 项 | 优先级 |
+|---|---|
+| `minClientVer` | `RealityMinClientVer` → 面板 → `"1.8.0"` |
+| `mldsa65Seed` | `RealityMldsa65Seed` → 面板 → 关闭 |
+| `decryption` | `VlessDecryption` → 面板 → `"none"` |
+
+> xray-core ≥ 26.7.11：若最终配置未设置 `minClientVer`，核心会默认 `26.3.27`，
+> Mihomo 等第三方客户端常上报 `1.8.x` 会被 REALITY 拒绝。**请保持显式配置**，
+> 兼容场景推荐 `1.8.0`，仅允许较新官方客户端时可设 `26.3.27`。
+
+**后量子与 CDN（详见 [deploy/K2BOARD_INTEGRATION.md](deploy/K2BOARD_INTEGRATION.md) / [deploy/TLS_XHTTP_CDN_PQ.md](deploy/TLS_XHTTP_CDN_PQ.md)）：**
+
+1. **ML-DSA-65**：可选签名，面板 `mldsa65_seed`  
+2. **X25519MLKEM768**：dest 支持时自动协商，无需字段  
+3. **VLESS Encryption**：可选 `decryption`，不可与 Fallback 同开  
+4. **TLS + XHTTP + CDN**：节点 `Transport/XHTTP/Security` 可本地完整覆盖  
 
 **优势：**
 - 无需购买或申请 TLS 证书
 - 流量与目标网站完全不可区分
 - 可抵抗主动探测（探测请求返回目标网站真实内容）
-- 支持后量子签名 ML-DSA-65
+- 可选后量子签名 / 密钥协商 / 载荷加密
 
 ### 6.5 禁用 TLS (CertMode: none)
 

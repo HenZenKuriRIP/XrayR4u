@@ -312,13 +312,16 @@ func (c *APIClient) ReportIllegal(detectResultList *[]api.DetectResult) error {
 //	  "network": "tcp",
 //	  "tls": 2,                     // 0=none, 1=tls, 2=reality
 //	  "flow": "xtls-rprx-vision",
+//	  "decryption": "none",         // optional; VLESS Encryption server string (PQ)
 //	  "tls_settings": {
 //	    "server_name": "...",
 //	    "public_key": "...",
 //	    "private_key": "...",
 //	    "short_id": "...",
 //	    "dest": "...",
-//	    "server_port": "443"
+//	    "server_port": "443",
+//	    "min_client_ver": "1.8.0",  // optional; overridable by ControllerConfig.RealityMinClientVer
+//	    "mldsa65_seed": "..."       // optional; REALITY ML-DSA-65 PQ signature seed
 //	  },
 //	  "base_config": { "push_interval": 60, "pull_interval": 60 }
 //	}
@@ -331,6 +334,7 @@ func (c *APIClient) ParseUniProxyNodeResponse(response *simplejson.Json) (*api.N
 
 	tlsMode := response.Get("tls").MustInt() // 0=none, 1=tls, 2=reality
 	flow := response.Get("flow").MustString() // "xtls-rprx-vision" or empty
+	vlessDecryption := resolvePanelVlessDecryption(response)
 
 	var enableTLS bool
 	var TLSType string
@@ -374,11 +378,25 @@ func (c *APIClient) ParseUniProxyNodeResponse(response *simplejson.Json) (*api.N
 		EnableVision:      enableVision,
 		EnableVless:       true, // UniProxy always VLESS
 		RealitySettings:   realitySettings,
+		VlessDecryption:   vlessDecryption,
 	}
 	return nodeInfo, nil
 }
 
-// buildRealitySettings converts UniProxy tls_settings to REALITYConfig JSON
+// defaultRealityMinClientVer is applied when neither the panel nor config.yml
+// supplies a minClientVer. Kept deliberately low for third-party client
+// compatibility (Mihomo etc. often report 1.8.x). Must stay non-empty so that
+// xray-core ≥ 26.7.11 does not fall through to its built-in default 26.3.27.
+const defaultRealityMinClientVer = "1.8.0"
+
+// buildRealitySettings converts UniProxy tls_settings to REALITYConfig JSON.
+// Panel-side fields (local config.yml overrides applied later in controller):
+//   - min_client_ver / minClientVer  → minClientVer (default "1.8.0")
+//   - mldsa65_seed / mldsa65Seed     → mldsa65Seed  (optional PQ cert signature)
+//   - show                           → show         (optional debug)
+//
+// X25519MLKEM768 (REALITY TLS PQ key agreement) needs no field: when dest
+// supports it, xray-core negotiates automatically on both ends.
 func buildRealitySettings(tlsSettings *simplejson.Json) json.RawMessage {
 	serverName := tlsSettings.Get("server_name").MustString()
 	dest := tlsSettings.Get("dest").MustString()
@@ -387,6 +405,9 @@ func buildRealitySettings(tlsSettings *simplejson.Json) json.RawMessage {
 	privateKey := tlsSettings.Get("private_key").MustString()
 	shortId := tlsSettings.Get("short_id").MustString()
 	fingerprint := tlsSettings.Get("fingerprint").MustString()
+	minClientVer := resolvePanelMinClientVer(tlsSettings)
+	mldsa65Seed := resolvePanelMldsa65Seed(tlsSettings)
+	show := tlsSettings.Get("show").MustBool()
 
 	if serverName == "" && privateKey == "" {
 		return nil
@@ -415,25 +436,74 @@ func buildRealitySettings(tlsSettings *simplejson.Json) json.RawMessage {
 		destAddr = net.JoinHostPort(dest, port)
 	}
 
-
 	// Default fingerprint to "chrome" if not provided by the panel.
 	if fingerprint == "" {
 		fingerprint = "chrome"
 	}
 
 	realityConfig := map[string]interface{}{
-		"show":         false,
+		"show":         show,
 		"dest":         destAddr,
 		"serverNames":  []string{serverName},
 		"privateKey":   privateKey,
 		"publicKey":    publicKey,
 		"shortIds":     []string{shortId},
 		"fingerprint":  fingerprint,
-		"minClientVer": "1.8.0",
+		"minClientVer": minClientVer,
 		"maxTimeDiff":  60000,
+	}
+	if mldsa65Seed != "" {
+		realityConfig["mldsa65Seed"] = mldsa65Seed
 	}
 	raw, _ := json.Marshal(realityConfig)
 	return raw
+}
+
+// resolvePanelMinClientVer reads optional minClientVer fields from panel
+// tls_settings. Returns the built-in default when the panel omits them.
+func resolvePanelMinClientVer(tlsSettings *simplejson.Json) string {
+	if tlsSettings == nil {
+		return defaultRealityMinClientVer
+	}
+	// Prefer snake_case (UniProxy / PHP panel convention), then camelCase.
+	if v := strings.TrimSpace(tlsSettings.Get("min_client_ver").MustString()); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(tlsSettings.Get("minClientVer").MustString()); v != "" {
+		return v
+	}
+	return defaultRealityMinClientVer
+}
+
+// resolvePanelMldsa65Seed reads optional REALITY ML-DSA-65 seed from panel
+// tls_settings. Empty means PQ cert signature is disabled.
+func resolvePanelMldsa65Seed(tlsSettings *simplejson.Json) string {
+	if tlsSettings == nil {
+		return ""
+	}
+	if v := strings.TrimSpace(tlsSettings.Get("mldsa65_seed").MustString()); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(tlsSettings.Get("mldsa65Seed").MustString()); v != "" {
+		return v
+	}
+	return ""
+}
+
+// resolvePanelVlessDecryption reads optional VLESS Encryption server string.
+// Empty means the controller will fall back to "none" (or config.yml override).
+// Accepts top-level "decryption" / "vless_decryption" on the UniProxy config body.
+func resolvePanelVlessDecryption(response *simplejson.Json) string {
+	if response == nil {
+		return ""
+	}
+	if v := strings.TrimSpace(response.Get("decryption").MustString()); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(response.Get("vless_decryption").MustString()); v != "" {
+		return v
+	}
+	return ""
 }
 
 // ParseUniProxyUserResponse parses the UniProxy user list response.

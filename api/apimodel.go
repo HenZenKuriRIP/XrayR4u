@@ -48,6 +48,11 @@ type NodeInfo struct {
 	ServiceName       string
 	Header            json.RawMessage
 	RealitySettings   json.RawMessage
+	// VlessDecryption is the VLESS inbound "decryption" string from the panel.
+	// Empty means "none". Supports post-quantum VLESS Encryption, e.g.
+	// mlkem768x25519plus.native.0rtt.<keys>... Local ControllerConfig.VlessDecryption
+	// overrides this when non-empty.
+	VlessDecryption string
 }
 
 type UserInfo struct {

@@ -387,7 +387,7 @@ func (c *Controller) addNewUser(userInfo *[]api.UserInfo, nodeInfo *api.NodeInfo
 	}
 
 	// VLESS: existing incremental user addition
-	users := c.buildVlessUser(userInfo, nodeInfo.EnableVision)
+	users := c.buildVlessUser(userInfo, resolveVision(c.config, nodeInfo))
 	if err := c.addUsers(users, tag); err != nil {
 		return err
 	}
@@ -651,6 +651,7 @@ func nodeInfoEqual(a, b *api.NodeInfo) bool {
 		a.EnableVless == b.EnableVless &&
 		a.CypherMethod == b.CypherMethod &&
 		a.ServiceName == b.ServiceName &&
+		a.VlessDecryption == b.VlessDecryption &&
 		bytes.Equal(a.Header, b.Header) &&
 		bytes.Equal(a.RealitySettings, b.RealitySettings)
 }

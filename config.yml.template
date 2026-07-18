@@ -1,7 +1,7 @@
 # ============================================================================
-# XrayR4u 配置文件模版 v0.9.12
+# XrayR4u 配置文件模版 v0.9.13
 # ============================================================================
-# 内置 Xray-core v1.260327.0 (REALITY / XTLS-Vision / VLESS)
+# 内置 Xray-core v26.7.11 (REALITY / XHTTP+CDN / Vision / VLESS Encryption / AnyTLS)
 # 配置文件需放置在 /etc/XrayR/config.yml
 # 或在启动时通过 --config 参数指定路径
 #
@@ -146,6 +146,49 @@ Nodes:
           Path: ""
           Dest: 80
           ProxyProtocolVer: 0
+
+      # [可选] REALITY minClientVer (x.y.z)
+      # 非空时覆盖面板 tls_settings.min_client_ver / minClientVer
+      # 留空则用面板值，面板也没有时默认 "1.8.0"
+      # 注意: xray-core ≥ 26.7.11 若最终未设置 minClientVer，核心会默认 26.3.27，
+      #       Mihomo 等第三方客户端常报 1.8.x 会被拒绝。
+      # 兼容推荐: "1.8.0"  |  仅官方 Xray 客户端: "26.3.27"
+      RealityMinClientVer: "1.8.0"
+
+      # [可选] REALITY ML-DSA-65 后量子证书签名 seed（base64.RawURLEncoding）
+      # 生成: xray mldsa65  → Seed 填服务端，Verify 公钥下发给客户端
+      # 非空覆盖面板 tls_settings.mldsa65_seed；留空用面板值，面板也无则关闭
+      RealityMldsa65Seed: ""
+
+      # [可选] REALITY 调试日志（含是否协商 X25519MLKEM768 后量子密钥交换）
+      # X25519MLKEM768 无需额外字段：dest 目标站支持时由 xray-core 自动协商
+      RealityShow: false
+
+      # [可选] VLESS Encryption 后量子载荷加密（settings.decryption）
+      # 默认留空 = "none"。非空覆盖面板 decryption 字段。
+      # 格式示例: mlkem768x25519plus.native.0rtt.<keys>...
+      # 生成密钥: xray mlkem768 / xray x25519
+      # 注意: 不能与 EnableFallback 同时开启；客户端需配置对应 encryption
+      VlessDecryption: ""
+
+      # ---------------------------------------------------------------------------
+      # TLS + XHTTP + CDN + 后量子（节点本地完整驱动，覆盖面板 network/tls）
+      # 详见 deploy/TLS_XHTTP_CDN_PQ.md
+      # ---------------------------------------------------------------------------
+      # Transport: "xhttp"
+      # Security: "tls"
+      # Vision: "off"                 # CDN 推荐关闭 Vision
+      # XHTTP:
+      #   Host: "cdn.example.com"
+      #   Path: "/vless-cdn"         # 必填
+      #   Mode: "auto"
+      # CertConfig:
+      #   CertMode: file
+      #   CertDomain: "cdn.example.com"
+      #   CertFile: /etc/XrayR/cert/cdn.example.com.crt
+      #   KeyFile: /etc/XrayR/cert/cdn.example.com.key
+      #   # 省略时默认 ALPN=h2,http/1.1；曲线含 X25519MLKEM768（TLS 层 PQ）
+      # VlessDecryption: ""         # xray vlessenc 生成的 decryption 串
 
       # REALITY 模式无需证书配置
       # TLS 模式需要以下证书配置:

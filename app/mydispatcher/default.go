@@ -176,7 +176,7 @@ func sourceIP(inbound *session.Inbound) string {
 // When email is non-empty the onClose callback also removes the IP from the
 // limiter's per-user online state so device-limit slots are freed immediately.
 func (d *DefaultDispatcher) trackConnection(tag string, ip string, email string, link *transport.Link) {
-	om, err := stats.GetOrRegisterOnlineMap(d.stats, onlineMapName(tag))
+	om, err := d.stats.GetOrRegisterOnlineMap(onlineMapName(tag))
 	if om == nil {
 		errors.LogDebug(context.Background(), "[conn-track] GetOrRegisterOnlineMap failed tag=", tag, " ip=", ip, " err=", err)
 		return
@@ -261,7 +261,7 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 		p := d.policy.ForLevel(user.Level)
 		if p.Stats.UserUplink {
 			name := "user>>>" + user.Email + ">>>traffic>>>uplink"
-			if c, _ := stats.GetOrRegisterCounter(d.stats, name); c != nil {
+			if c, _ := d.stats.GetOrRegisterCounter(name); c != nil {
 				inboundLink.Writer = &SizeStatWriter{
 					Counter: c,
 					Writer:  inboundLink.Writer,
@@ -270,7 +270,7 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 		}
 		if p.Stats.UserDownlink {
 			name := "user>>>" + user.Email + ">>>traffic>>>downlink"
-			if c, _ := stats.GetOrRegisterCounter(d.stats, name); c != nil {
+			if c, _ := d.stats.GetOrRegisterCounter(name); c != nil {
 				outboundLink.Writer = &SizeStatWriter{
 					Counter: c,
 					Writer:  outboundLink.Writer,
@@ -284,10 +284,11 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 
 func shouldOverride(ctx context.Context, result SniffResult, request session.SniffingRequest, destination net.Destination) bool {
 	domain := result.Domain()
-	for _, d := range request.ExcludeForDomain {
-		if strings.ToLower(domain) == d {
-			return false
-		}
+	if domain == "" {
+		return false
+	}
+	if request.ExcludeForDomain != nil && request.ExcludeForDomain.MatchAny(strings.ToLower(domain)) {
+		return false
 	}
 	var fakeDNSEngine dns.FakeDNSEngine
 	core.RequireFeatures(ctx, func(fdns dns.FakeDNSEngine) {
@@ -450,13 +451,13 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 		p := d.policy.ForLevel(user.Level)
 		if p.Stats.UserUplink {
 			name := "user>>>" + user.Email + ">>>traffic>>>uplink"
-			if c, _ := stats.GetOrRegisterCounter(d.stats, name); c != nil {
+			if c, _ := d.stats.GetOrRegisterCounter(name); c != nil {
 				outbound.Reader = &SizeStatReader{Counter: c, Reader: outbound.Reader}
 			}
 		}
 		if p.Stats.UserDownlink {
 			name := "user>>>" + user.Email + ">>>traffic>>>downlink"
-			if c, _ := stats.GetOrRegisterCounter(d.stats, name); c != nil {
+			if c, _ := d.stats.GetOrRegisterCounter(name); c != nil {
 				outbound.Writer = &SizeStatWriter{Counter: c, Writer: outbound.Writer}
 			}
 		}

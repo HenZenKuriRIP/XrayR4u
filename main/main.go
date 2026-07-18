@@ -23,7 +23,7 @@ var (
 )
 
 var (
-	version  = "0.9.12"
+	version  = "0.9.13"
 	codename = "XrayR4u"
 	intro    = "Xray backend for K2Board (VLESS + UniProxy)"
 )

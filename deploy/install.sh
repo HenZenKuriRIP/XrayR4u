@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================================
-# XrayR v0.9.12 VPS 一键部署脚本
+# XrayR v0.9.13 VPS 一键部署脚本
 # 支持: Debian 12/13, Ubuntu 20.04+/22.04+/24.04+
-# 内置 xray-core v1.260327.0 | VLESS + REALITY / AnyTLS + TLS
+# 内置 xray-core v26.7.11 | VLESS + REALITY / TLS+XHTTP+CDN / AnyTLS + TLS
 #
 # 用法:
 #   bash install.sh             安装 XrayR
@@ -31,7 +31,7 @@ XRAYR_BIN_DIR="/usr/local/bin"
 XRAYR_BIN_NAME="XrayR"
 XRAYR_SERVICE="/etc/systemd/system/xrayr.service"
 XRAYR_REPO="HenZenKuriRIP/XrayR4u"
-XRAYR_VERSION="v0.9.12"
+XRAYR_VERSION="v0.9.13"
 
 # ============================================================================
 # 卸载函数
@@ -195,8 +195,8 @@ clear
 echo ""
 echo -e "${CYAN}╔═══════════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║                                                   ║${NC}"
-echo -e "${CYAN}║        ${BOLD}XrayR v0.9.12 — VPS 一键部署脚本${NC}${CYAN}             ║${NC}"
-echo -e "${CYAN}║        VLESS + REALITY / AnyTLS + TLS             ║${NC}"
+echo -e "${CYAN}║        ${BOLD}XrayR v0.9.13 — VPS 一键部署脚本${NC}${CYAN}             ║${NC}"
+echo -e "${CYAN}║   VLESS+REALITY / TLS+XHTTP+CDN / AnyTLS+TLS      ║${NC}"
 echo -e "${CYAN}║        适配 K2Board (UniProxy) 面板                 ║${NC}"
 echo -e "${CYAN}║                                                   ║${NC}"
 echo -e "${CYAN}╚═══════════════════════════════════════════════════╝${NC}"
@@ -869,7 +869,7 @@ pause 1
 cat > "$XRAYR_INSTALL_DIR/config.yml" << YML
 # ============================================================================
 # XrayR 配置文件 — 安装模式: ${INSTALL_MODE}
-# 内置 xray-core v1.260327.0
+# 内置 xray-core v26.7.11 | XrayR4u v0.9.13
 # ============================================================================
 Log:
   Level: warning
@@ -918,10 +918,18 @@ if $INSTALL_VLESS; then
       DisableUploadTraffic: false
       DisableGetRule: false
       DisableIVCheck: false
+      # REALITY: 兼容 Mihomo 等客户端（xray-core ≥26.7.11 勿留空）
+      RealityMinClientVer: "1.8.0"
+      # 可选后量子 / CDN 覆盖见官方文档 deploy/K2BOARD_INTEGRATION.md
+      # RealityMldsa65Seed: ""
+      # VlessDecryption: ""
+      # Transport: "xhttp"
+      # Security: "tls"
+      # XHTTP: { Host: "cdn.example.com", Path: "/vless", Mode: "auto" }
       CertConfig:
         CertMode: none
 YML
-    log_info "VLESS 节点配置已添加"
+    log_info "VLESS 节点配置已添加 (REALITY + minClientVer=1.8.0)"
 fi
 
 # --- AnyTLS 节点 ---

@@ -137,7 +137,16 @@ type tcpHandlerEx struct {
 func (h *tcpHandlerEx) NewConnectionEx(ctx context.Context, conn net.Conn, source M.Socksaddr, destination M.Socksaddr, onClose N.CloseHandlerFunc) {
 	// Convert M.Socksaddr → xray-core net.Destination using xray-core's
 	// own helper (handles FQDN, IP, and invalid addresses).
-	dest := singbridge.ToDestination(destination, xnet.Network_TCP)
+	dest, err := singbridge.ToDestination(destination, xnet.Network_TCP)
+	if err != nil {
+		errors.LogInfo(ctx, "anytls: invalid destination: ", err)
+		if onClose != nil {
+			onClose(err)
+		} else {
+			_ = conn.Close()
+		}
+		return
+	}
 
 	// Retrieve the authenticated user name from the context (set by sing-anytls).
 	// The User.Name is in "tag|email|uid" format — compatible with the limiter's

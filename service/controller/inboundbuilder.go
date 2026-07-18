@@ -16,6 +16,10 @@ import (
 	"github.com/xtls/xray-core/infra/conf"
 )
 
+// defaultRealityMinClientVer is used when neither config.yml nor panel
+// supplies minClientVer. Must stay non-empty for xray-core ≥ 26.7.11.
+const defaultRealityMinClientVer = "1.8.0"
+
 // InboundBuilder build Inbound config for different protocol
 func InboundBuilder(config *Config, nodeInfo *api.NodeInfo, tag string) (*core.InboundHandlerConfig, error) {
 	inboundDetourConfig := &conf.InboundDetourConfig{}
@@ -35,7 +39,7 @@ func InboundBuilder(config *Config, nodeInfo *api.NodeInfo, tag string) (*core.I
 	// SniffingConfig
 	sniffingConfig := &conf.SniffingConfig{
 		Enabled:      true,
-		DestOverride: &conf.StringList{"http", "tls"},
+		DestOverride: conf.StringList{"http", "tls"},
 	}
 	if config.DisableSniffing {
 		sniffingConfig.Enabled = false
@@ -56,22 +60,31 @@ func InboundBuilder(config *Config, nodeInfo *api.NodeInfo, tag string) (*core.I
 
 	// Build Protocol — VLESS
 	protocol := "vless"
+	decryption := resolveVlessDecryption(config, nodeInfo)
 	var (
 		proxySetting interface{}
 		setting      json.RawMessage
 	)
 	if config.EnableFallback {
+		// xray-core forbids fallbacks together with non-"none" VLESS Encryption.
+		if decryption != "none" {
+			return nil, fmt.Errorf(
+				"VLESS Encryption (decryption=%q) cannot be used together with EnableFallback; "+
+					"disable FallBackConfigs or set decryption to none",
+				decryption,
+			)
+		}
 		fallbackConfigs, err := buildVlessFallbacks(config.FallBackConfigs)
 		if err != nil {
 			return nil, err
 		}
 		proxySetting = &conf.VLessInboundConfig{
-			Decryption: "none",
+			Decryption: decryption,
 			Fallbacks:  fallbackConfigs,
 		}
 	} else {
 		proxySetting = &conf.VLessInboundConfig{
-			Decryption: "none",
+			Decryption: decryption,
 		}
 	}
 
@@ -87,83 +100,121 @@ func InboundBuilder(config *Config, nodeInfo *api.NodeInfo, tag string) (*core.I
 	return inboundDetourConfig.Build()
 }
 
+// resolveVlessDecryption picks the VLESS inbound decryption string.
+// Priority: ControllerConfig.VlessDecryption > panel NodeInfo.VlessDecryption > "none".
+func resolveVlessDecryption(config *Config, nodeInfo *api.NodeInfo) string {
+	if config != nil {
+		if v := strings.TrimSpace(config.VlessDecryption); v != "" {
+			return v
+		}
+	}
+	if nodeInfo != nil {
+		if v := strings.TrimSpace(nodeInfo.VlessDecryption); v != "" {
+			return v
+		}
+	}
+	return "none"
+}
+
 // buildStreamSetting constructs the stream/tls/transport settings shared by
 // all protocols. It is extracted from InboundBuilder so anytls can reuse it
 // without going through conf.InboundDetourConfig.Build().
+//
+// Local ControllerConfig can fully drive TLS+XHTTP+CDN without panel fields:
+//   Transport, Security, XHTTP.*, CertConfig (ALPN/curves), EnableProxyProtocol.
 func buildStreamSetting(config *Config, nodeInfo *api.NodeInfo) (*conf.StreamConfig, error) {
 	streamSetting := new(conf.StreamConfig)
-	transportProtocolName := normalizeTransportProtocol(nodeInfo.TransportProtocol)
+	transportProtocolName := resolveTransport(config, nodeInfo)
 	transportProtocol := conf.TransportProtocol(transportProtocolName)
 	networkType, err := transportProtocol.Build()
 	if err != nil {
 		return nil, fmt.Errorf("convert TransportProtocol failed: %s", err)
 	}
-	if networkType == "tcp" {
-		tcpSetting := &conf.TCPConfig{
-			AcceptProxyProtocol: config.EnableProxyProtocol,
-			HeaderConfig:        nodeInfo.Header,
+
+	// Keep Network as the user-facing name (xhttp) when possible; Build() maps it.
+	streamSetting.Network = &transportProtocol
+
+	switch networkType {
+	case "tcp":
+		var header json.RawMessage
+		if nodeInfo != nil {
+			header = nodeInfo.Header
 		}
-		streamSetting.TCPSettings = tcpSetting
-	} else if networkType == "websocket" {
-		headers := make(map[string]string)
-		headers["Host"] = nodeInfo.Host
-		wsSettings := &conf.WebSocketConfig{
-			AcceptProxyProtocol: config.EnableProxyProtocol,
-			Path:                nodeInfo.Path,
+		streamSetting.TCPSettings = &conf.TCPConfig{
+			AcceptProxyProtocol: config != nil && config.EnableProxyProtocol,
+			HeaderConfig:        header,
+		}
+	case "websocket":
+		host := ""
+		path := ""
+		if nodeInfo != nil {
+			host, path = nodeInfo.Host, nodeInfo.Path
+		}
+		// Allow XHTTP-style local Host/Path reuse for ws if set.
+		if config != nil && config.XHTTP != nil {
+			if v := strings.TrimSpace(config.XHTTP.Host); v != "" {
+				host = v
+			}
+			if v := strings.TrimSpace(config.XHTTP.Path); v != "" {
+				path = v
+			}
+		}
+		headers := map[string]string{"Host": host}
+		streamSetting.WSSettings = &conf.WebSocketConfig{
+			AcceptProxyProtocol: config != nil && config.EnableProxyProtocol,
+			Path:                path,
 			Headers:             headers,
 		}
-		streamSetting.WSSettings = wsSettings
-	} else if networkType == "splithttp" {
-		splitHTTPSettings := &conf.SplitHTTPConfig{
-			Host: nodeInfo.Host,
-			Path: nodeInfo.Path,
+	case "splithttp":
+		xhttpSettings, err := buildXHTTPSettings(config, nodeInfo)
+		if err != nil {
+			return nil, err
 		}
-		streamSetting.SplitHTTPSettings = splitHTTPSettings
-	} else if networkType == "grpc" {
-		grpcSettings := &conf.GRPCConfig{
-			ServiceName: nodeInfo.ServiceName,
+		streamSetting.SplitHTTPSettings = xhttpSettings
+		// Also set XHTTPSettings alias for cores that prefer the new name.
+		streamSetting.XHTTPSettings = xhttpSettings
+	case "grpc":
+		serviceName := ""
+		if nodeInfo != nil {
+			serviceName = nodeInfo.ServiceName
 		}
-		streamSetting.GRPCSettings = grpcSettings
+		streamSetting.GRPCSettings = &conf.GRPCConfig{ServiceName: serviceName}
+	default:
+		// Other transports (kcp, hysteria, …) rely on core defaults; network already set.
 	}
 
-	streamSetting.Network = &transportProtocol
-	// Build TLS and REALITY settings
-	security := normalizeSecurityType(nodeInfo.TLSType)
+	// Build TLS / REALITY (local Security overrides panel).
+	security := resolveSecurity(config, nodeInfo)
 	switch security {
 	case "reality":
 		streamSetting.Security = "reality"
-		if len(nodeInfo.RealitySettings) == 0 {
-			return nil, fmt.Errorf("Reality security requires realitySettings")
+		if nodeInfo == nil || len(nodeInfo.RealitySettings) == 0 {
+			return nil, fmt.Errorf("Reality security requires realitySettings from panel (or keep Security empty and use tls for CDN)")
 		}
 		realitySettings := &conf.REALITYConfig{}
 		if err := json.Unmarshal(nodeInfo.RealitySettings, realitySettings); err != nil {
 			return nil, fmt.Errorf("Unmarshal realitySettings failed: %s", err)
 		}
+		applyRealityLocalOverrides(config, realitySettings)
 		streamSetting.REALITYSettings = realitySettings
 	case "tls":
-		if !nodeInfo.EnableTLS || config.CertConfig == nil || config.CertConfig.CertMode == "none" {
-			break
-		}
-		streamSetting.Security = "tls"
-		certFile, keyFile, err := getCertFile(config.CertConfig)
+		tlsSettings, err := buildTLSSettings(config)
 		if err != nil {
 			return nil, err
 		}
-		tlsSettings := &conf.TLSConfig{
-			RejectUnknownSNI: config.CertConfig.RejectUnknownSni,
-		}
-		tlsSettings.Certs = append(tlsSettings.Certs, &conf.TLSCertConfig{CertFile: certFile, KeyFile: keyFile, OcspStapling: 3600})
+		streamSetting.Security = "tls"
 		streamSetting.TLSSettings = tlsSettings
 	case "":
+		// No transport security (e.g. CDN terminates TLS, origin HTTP-only XHTTP).
 	default:
-		return nil, fmt.Errorf("unsupported security type: %s", nodeInfo.TLSType)
+		return nil, fmt.Errorf("unsupported security type: %s", security)
 	}
-	// Support ProxyProtocol for any transport protocol
-	if networkType != "tcp" && networkType != "ws" && config.EnableProxyProtocol {
-		sockoptConfig := &conf.SocketConfig{
-			AcceptProxyProtocol: config.EnableProxyProtocol,
+
+	// PROXY protocol: useful when CDN/LB preserves client IP to origin.
+	if networkType != "tcp" && networkType != "ws" && config != nil && config.EnableProxyProtocol {
+		streamSetting.SocketSettings = &conf.SocketConfig{
+			AcceptProxyProtocol: true,
 		}
-		streamSetting.SocketSettings = sockoptConfig
 	}
 	return streamSetting, nil
 }
@@ -241,6 +292,36 @@ func normalizeSecurityType(security string) string {
 		return strings.ToLower(security)
 	default:
 		return ""
+	}
+}
+
+// applyRealityLocalOverrides applies ControllerConfig knobs onto REALITY settings
+// built from the panel. Local non-empty values always win.
+func applyRealityLocalOverrides(config *Config, realitySettings *conf.REALITYConfig) {
+	if realitySettings == nil {
+		return
+	}
+	if config == nil {
+		if strings.TrimSpace(realitySettings.MinClientVer) == "" {
+			realitySettings.MinClientVer = defaultRealityMinClientVer
+		}
+		return
+	}
+	// minClientVer: local override → panel → built-in default (must stay non-empty
+	// for xray-core ≥ 26.7.11 so the core does not force 26.3.27).
+	if v := strings.TrimSpace(config.RealityMinClientVer); v != "" {
+		realitySettings.MinClientVer = v
+	} else if strings.TrimSpace(realitySettings.MinClientVer) == "" {
+		realitySettings.MinClientVer = defaultRealityMinClientVer
+	}
+	// ML-DSA-65 seed: local override only when set; otherwise keep panel value.
+	if v := strings.TrimSpace(config.RealityMldsa65Seed); v != "" {
+		realitySettings.Mldsa65Seed = v
+	}
+	// show: local flag forces on (cannot force off if panel already set true —
+	// panel rarely sets show; this is the ops debug switch).
+	if config.RealityShow {
+		realitySettings.Show = true
 	}
 }
 

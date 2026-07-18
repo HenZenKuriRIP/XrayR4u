@@ -84,7 +84,7 @@ github.com/andres-erbsen/clock
 ## explicit; go 1.13
 github.com/andybalholm/brotli
 github.com/andybalholm/brotli/matchfinder
-# github.com/apernet/quic-go v0.59.1-0.20260217092621-db4786c77a22
+# github.com/apernet/quic-go v0.59.1-0.20260425001925-6c6cc9bcb716
 ## explicit; go 1.24
 github.com/apernet/quic-go
 github.com/apernet/quic-go/congestion
@@ -168,8 +168,8 @@ github.com/cenkalti/backoff/v4
 # github.com/cespare/xxhash/v2 v2.3.0
 ## explicit; go 1.11
 github.com/cespare/xxhash/v2
-# github.com/cloudflare/circl v1.6.3
-## explicit; go 1.22.0
+# github.com/cloudflare/circl v1.6.4
+## explicit; go 1.24.0
 github.com/cloudflare/circl/internal/sha3
 github.com/cloudflare/circl/sign
 github.com/cloudflare/circl/sign/internal/dilithium
@@ -526,8 +526,8 @@ github.com/klauspost/compress/internal/le
 github.com/klauspost/compress/internal/snapref
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
-# github.com/klauspost/cpuid/v2 v2.3.0
-## explicit; go 1.22
+# github.com/klauspost/cpuid/v2 v2.4.0
+## explicit; go 1.24.0
 github.com/klauspost/cpuid/v2
 # github.com/kolo/xmlrpc v0.0.0-20201022064351-38db28db192b
 ## explicit; go 1.14
@@ -629,8 +629,46 @@ github.com/pelletier/go-toml/v2
 github.com/pelletier/go-toml/v2/internal/ast
 github.com/pelletier/go-toml/v2/internal/danger
 github.com/pelletier/go-toml/v2/internal/tracker
-# github.com/pires/go-proxyproto v0.11.0
-## explicit; go 1.24
+# github.com/pion/dtls/v3 v3.1.4
+## explicit; go 1.24.0
+github.com/pion/dtls/v3
+github.com/pion/dtls/v3/internal/ciphersuite
+github.com/pion/dtls/v3/internal/ciphersuite/types
+github.com/pion/dtls/v3/internal/closer
+github.com/pion/dtls/v3/internal/net
+github.com/pion/dtls/v3/internal/net/udp
+github.com/pion/dtls/v3/internal/util
+github.com/pion/dtls/v3/pkg/crypto/ccm
+github.com/pion/dtls/v3/pkg/crypto/ciphersuite
+github.com/pion/dtls/v3/pkg/crypto/clientcertificate
+github.com/pion/dtls/v3/pkg/crypto/elliptic
+github.com/pion/dtls/v3/pkg/crypto/hash
+github.com/pion/dtls/v3/pkg/crypto/prf
+github.com/pion/dtls/v3/pkg/crypto/signature
+github.com/pion/dtls/v3/pkg/crypto/signaturehash
+github.com/pion/dtls/v3/pkg/net
+github.com/pion/dtls/v3/pkg/protocol
+github.com/pion/dtls/v3/pkg/protocol/alert
+github.com/pion/dtls/v3/pkg/protocol/extension
+github.com/pion/dtls/v3/pkg/protocol/handshake
+github.com/pion/dtls/v3/pkg/protocol/recordlayer
+# github.com/pion/logging v0.2.4
+## explicit; go 1.20
+github.com/pion/logging
+# github.com/pion/stun/v3 v3.1.6
+## explicit; go 1.24.0
+github.com/pion/stun/v3
+github.com/pion/stun/v3/internal/hmac
+# github.com/pion/transport/v4 v4.0.2
+## explicit; go 1.24.0
+github.com/pion/transport/v4
+github.com/pion/transport/v4/deadline
+github.com/pion/transport/v4/netctx
+github.com/pion/transport/v4/replaydetector
+github.com/pion/transport/v4/stdnet
+github.com/pion/transport/v4/utils/xor
+# github.com/pires/go-proxyproto v0.15.0
+## explicit; go 1.25.0
 github.com/pires/go-proxyproto
 # github.com/pkg/errors v0.9.1
 ## explicit
@@ -666,6 +704,9 @@ github.com/refraction-networking/utls/internal/quicvarint
 github.com/refraction-networking/utls/internal/quicvarint/protocol
 github.com/refraction-networking/utls/internal/tls12
 github.com/refraction-networking/utls/internal/tls13
+# github.com/robfig/cron/v3 v3.0.1
+## explicit; go 1.12
+github.com/robfig/cron/v3
 # github.com/russross/blackfriday/v2 v2.1.0
 ## explicit
 github.com/russross/blackfriday/v2
@@ -698,7 +739,6 @@ github.com/sagernet/sing/common/replay
 github.com/sagernet/sing/common/rw
 github.com/sagernet/sing/common/task
 github.com/sagernet/sing/common/udpnat
-github.com/sagernet/sing/common/uot
 github.com/sagernet/sing/common/varbin
 github.com/sagernet/sing/common/x/list
 # github.com/sagernet/sing-shadowsocks v0.2.8
@@ -771,6 +811,7 @@ github.com/stretchr/objx
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/assert/yaml
 github.com/stretchr/testify/mock
+github.com/stretchr/testify/require
 # github.com/subosito/gotenv v1.2.0
 ## explicit
 github.com/subosito/gotenv
@@ -818,6 +859,9 @@ github.com/vmihailenco/msgpack/codes
 # github.com/vultr/govultr/v2 v2.14.1
 ## explicit; go 1.16
 github.com/vultr/govultr/v2
+# github.com/wlynxg/anet v0.0.5
+## explicit; go 1.20
+github.com/wlynxg/anet
 # github.com/xtls/reality v0.0.0-20260322125925-9234c772ba8f
 ## explicit; go 1.24.0
 github.com/xtls/reality
@@ -825,12 +869,13 @@ github.com/xtls/reality/fips140tls
 github.com/xtls/reality/hpke
 github.com/xtls/reality/tls12
 github.com/xtls/reality/tls13
-# github.com/xtls/xray-core v1.260327.0
+# github.com/xtls/xray-core v1.260327.1-0.20260711155151-50231eaff98c
 ## explicit; go 1.26
 github.com/xtls/xray-core/app/commander
 github.com/xtls/xray-core/app/dispatcher
 github.com/xtls/xray-core/app/dns
 github.com/xtls/xray-core/app/dns/fakedns
+github.com/xtls/xray-core/app/geodata
 github.com/xtls/xray-core/app/log
 github.com/xtls/xray-core/app/log/command
 github.com/xtls/xray-core/app/metrics
@@ -861,6 +906,8 @@ github.com/xtls/xray-core/common/ctx
 github.com/xtls/xray-core/common/dice
 github.com/xtls/xray-core/common/drain
 github.com/xtls/xray-core/common/errors
+github.com/xtls/xray-core/common/geodata
+github.com/xtls/xray-core/common/geodata/strmatcher
 github.com/xtls/xray-core/common/log
 github.com/xtls/xray-core/common/mux
 github.com/xtls/xray-core/common/net
@@ -885,7 +932,6 @@ github.com/xtls/xray-core/common/signal/done
 github.com/xtls/xray-core/common/signal/pubsub
 github.com/xtls/xray-core/common/signal/semaphore
 github.com/xtls/xray-core/common/singbridge
-github.com/xtls/xray-core/common/strmatcher
 github.com/xtls/xray-core/common/task
 github.com/xtls/xray-core/common/utils
 github.com/xtls/xray-core/common/uuid
@@ -924,13 +970,13 @@ github.com/xtls/xray-core/proxy/freedom
 github.com/xtls/xray-core/proxy/http
 github.com/xtls/xray-core/proxy/hysteria
 github.com/xtls/xray-core/proxy/hysteria/account
-github.com/xtls/xray-core/proxy/hysteria/ctx
 github.com/xtls/xray-core/proxy/loopback
 github.com/xtls/xray-core/proxy/shadowsocks
 github.com/xtls/xray-core/proxy/shadowsocks_2022
 github.com/xtls/xray-core/proxy/socks
 github.com/xtls/xray-core/proxy/trojan
 github.com/xtls/xray-core/proxy/tun
+github.com/xtls/xray-core/proxy/tun/icmp
 github.com/xtls/xray-core/proxy/vless
 github.com/xtls/xray-core/proxy/vless/encoding
 github.com/xtls/xray-core/proxy/vless/encryption
@@ -942,26 +988,22 @@ github.com/xtls/xray-core/proxy/vmess/encoding
 github.com/xtls/xray-core/proxy/vmess/inbound
 github.com/xtls/xray-core/proxy/vmess/outbound
 github.com/xtls/xray-core/proxy/wireguard
-github.com/xtls/xray-core/proxy/wireguard/gvisortun
 github.com/xtls/xray-core/transport
 github.com/xtls/xray-core/transport/internet
 github.com/xtls/xray-core/transport/internet/browser_dialer
 github.com/xtls/xray-core/transport/internet/finalmask
 github.com/xtls/xray-core/transport/internet/finalmask/fragment
 github.com/xtls/xray-core/transport/internet/finalmask/header/custom
-github.com/xtls/xray-core/transport/internet/finalmask/header/dns
-github.com/xtls/xray-core/transport/internet/finalmask/header/dtls
-github.com/xtls/xray-core/transport/internet/finalmask/header/srtp
-github.com/xtls/xray-core/transport/internet/finalmask/header/utp
-github.com/xtls/xray-core/transport/internet/finalmask/header/wechat
-github.com/xtls/xray-core/transport/internet/finalmask/header/wireguard
 github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm
+github.com/xtls/xray-core/transport/internet/finalmask/mkcp/header
 github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original
 github.com/xtls/xray-core/transport/internet/finalmask/noise
+github.com/xtls/xray-core/transport/internet/finalmask/realm
 github.com/xtls/xray-core/transport/internet/finalmask/salamander
 github.com/xtls/xray-core/transport/internet/finalmask/sudoku
 github.com/xtls/xray-core/transport/internet/finalmask/xdns
 github.com/xtls/xray-core/transport/internet/finalmask/xicmp
+github.com/xtls/xray-core/transport/internet/finalmask/xmc
 github.com/xtls/xray-core/transport/internet/grpc
 github.com/xtls/xray-core/transport/internet/grpc/encoding
 github.com/xtls/xray-core/transport/internet/headers/http
@@ -972,7 +1014,6 @@ github.com/xtls/xray-core/transport/internet/hysteria/congestion
 github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr
 github.com/xtls/xray-core/transport/internet/hysteria/congestion/brutal
 github.com/xtls/xray-core/transport/internet/hysteria/congestion/common
-github.com/xtls/xray-core/transport/internet/hysteria/padding
 github.com/xtls/xray-core/transport/internet/hysteria/udphop
 github.com/xtls/xray-core/transport/internet/kcp
 github.com/xtls/xray-core/transport/internet/reality
@@ -997,8 +1038,8 @@ go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp/internal/request
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp/internal/semconv
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp/internal/semconvutil
-# go.opentelemetry.io/otel v1.39.0
-## explicit; go 1.24.0
+# go.opentelemetry.io/otel v1.43.0
+## explicit; go 1.25.0
 go.opentelemetry.io/otel
 go.opentelemetry.io/otel/attribute
 go.opentelemetry.io/otel/attribute/internal
@@ -1006,18 +1047,20 @@ go.opentelemetry.io/otel/attribute/internal/xxhash
 go.opentelemetry.io/otel/baggage
 go.opentelemetry.io/otel/codes
 go.opentelemetry.io/otel/internal/baggage
+go.opentelemetry.io/otel/internal/errorhandler
 go.opentelemetry.io/otel/internal/global
 go.opentelemetry.io/otel/propagation
 go.opentelemetry.io/otel/semconv/v1.20.0
 go.opentelemetry.io/otel/semconv/v1.26.0
 go.opentelemetry.io/otel/semconv/v1.37.0
-# go.opentelemetry.io/otel/metric v1.39.0
-## explicit; go 1.24.0
+go.opentelemetry.io/otel/semconv/v1.40.0
+# go.opentelemetry.io/otel/metric v1.43.0
+## explicit; go 1.25.0
 go.opentelemetry.io/otel/metric
 go.opentelemetry.io/otel/metric/embedded
 go.opentelemetry.io/otel/metric/noop
-# go.opentelemetry.io/otel/trace v1.39.0
-## explicit; go 1.24.0
+# go.opentelemetry.io/otel/trace v1.43.0
+## explicit; go 1.25.0
 go.opentelemetry.io/otel/trace
 go.opentelemetry.io/otel/trace/embedded
 go.opentelemetry.io/otel/trace/internal/telemetry
@@ -1028,7 +1071,7 @@ go.uber.org/ratelimit
 # go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
 ## explicit; go 1.18
 go4.org/netipx
-# golang.org/x/crypto v0.49.0
+# golang.org/x/crypto v0.54.0
 ## explicit; go 1.25.0
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
@@ -1050,10 +1093,10 @@ golang.org/x/crypto/sha3
 # golang.org/x/exp v0.0.0-20251219203646-944ab1f22d93
 ## explicit; go 1.24.0
 golang.org/x/exp/constraints
-# golang.org/x/mod v0.33.0
-## explicit; go 1.24.0
+# golang.org/x/mod v0.37.0
+## explicit; go 1.25.0
 golang.org/x/mod/semver
-# golang.org/x/net v0.52.0
+# golang.org/x/net v0.57.0
 ## explicit; go 1.25.0
 golang.org/x/net/bpf
 golang.org/x/net/context
@@ -1071,9 +1114,10 @@ golang.org/x/net/internal/timeseries
 golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/publicsuffix
+golang.org/x/net/route
 golang.org/x/net/trace
-# golang.org/x/oauth2 v0.34.0
-## explicit; go 1.24.0
+# golang.org/x/oauth2 v0.36.0
+## explicit; go 1.25.0
 golang.org/x/oauth2
 golang.org/x/oauth2/authhandler
 golang.org/x/oauth2/clientcredentials
@@ -1085,17 +1129,19 @@ golang.org/x/oauth2/google/internal/stsexchange
 golang.org/x/oauth2/internal
 golang.org/x/oauth2/jws
 golang.org/x/oauth2/jwt
-# golang.org/x/sync v0.20.0
+# golang.org/x/sync v0.22.0
 ## explicit; go 1.25.0
 golang.org/x/sync/errgroup
 golang.org/x/sync/singleflight
-# golang.org/x/sys v0.42.0
+# golang.org/x/sys v0.47.0
 ## explicit; go 1.25.0
 golang.org/x/sys/cpu
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-# golang.org/x/text v0.35.0
+golang.org/x/sys/windows/svc
+golang.org/x/sys/windows/svc/mgr
+# golang.org/x/text v0.40.0
 ## explicit; go 1.25.0
 golang.org/x/text/encoding
 golang.org/x/text/encoding/charmap
@@ -1105,11 +1151,11 @@ golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
-# golang.org/x/time v0.12.0
-## explicit; go 1.23.0
-golang.org/x/time/rate
-# golang.org/x/tools v0.42.0
+# golang.org/x/time v0.14.0
 ## explicit; go 1.24.0
+golang.org/x/time/rate
+# golang.org/x/tools v0.47.0
+## explicit; go 1.25.0
 golang.org/x/tools/go/ast/edge
 golang.org/x/tools/go/ast/inspector
 golang.org/x/tools/go/gcexportdata
@@ -1144,6 +1190,9 @@ golang.zx2c4.com/wireguard/replay
 golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tai64n
 golang.zx2c4.com/wireguard/tun
+# golang.zx2c4.com/wireguard/windows v1.0.1
+## explicit; go 1.25.0
+golang.zx2c4.com/wireguard/windows/tunnel/winipcfg
 # google.golang.org/api v0.249.0
 ## explicit; go 1.24.0
 google.golang.org/api/dns/v1
@@ -1170,13 +1219,13 @@ google.golang.org/appengine/internal/datastore
 google.golang.org/appengine/internal/log
 google.golang.org/appengine/internal/modules
 google.golang.org/appengine/internal/remote_api
-# google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217
-## explicit; go 1.24.0
+# google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478
+## explicit; go 1.25.0
 google.golang.org/genproto/googleapis/rpc/code
 google.golang.org/genproto/googleapis/rpc/errdetails
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.79.3
-## explicit; go 1.24.0
+# google.golang.org/grpc v1.82.0
+## explicit; go 1.25.0
 google.golang.org/grpc
 google.golang.org/grpc/attributes
 google.golang.org/grpc/backoff
@@ -1196,13 +1245,13 @@ google.golang.org/grpc/credentials/insecure
 google.golang.org/grpc/encoding
 google.golang.org/grpc/encoding/internal
 google.golang.org/grpc/encoding/proto
+google.golang.org/grpc/experimental/balancer/weight
 google.golang.org/grpc/experimental/stats
 google.golang.org/grpc/grpclog
 google.golang.org/grpc/grpclog/internal
 google.golang.org/grpc/internal
 google.golang.org/grpc/internal/backoff
 google.golang.org/grpc/internal/balancer/gracefulswitch
-google.golang.org/grpc/internal/balancer/weight
 google.golang.org/grpc/internal/balancerload
 google.golang.org/grpc/internal/binarylog
 google.golang.org/grpc/internal/buffer
@@ -1213,6 +1262,7 @@ google.golang.org/grpc/internal/grpclog
 google.golang.org/grpc/internal/grpcsync
 google.golang.org/grpc/internal/grpcutil
 google.golang.org/grpc/internal/idle
+google.golang.org/grpc/internal/mem
 google.golang.org/grpc/internal/metadata
 google.golang.org/grpc/internal/pretty
 google.golang.org/grpc/internal/proxyattributes
@@ -1227,7 +1277,9 @@ google.golang.org/grpc/internal/stats
 google.golang.org/grpc/internal/status
 google.golang.org/grpc/internal/syscall
 google.golang.org/grpc/internal/transport
+google.golang.org/grpc/internal/transport/internal
 google.golang.org/grpc/internal/transport/networktype
+google.golang.org/grpc/internal/transport/readyreader
 google.golang.org/grpc/keepalive
 google.golang.org/grpc/mem
 google.golang.org/grpc/metadata

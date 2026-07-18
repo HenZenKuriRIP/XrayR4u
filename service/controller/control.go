@@ -140,14 +140,14 @@ func (c *Controller) restoreTraffic(email string, up, down int64) {
 	if up > 0 {
 		if upCounter := statsManager.GetCounter(upName); upCounter != nil {
 			upCounter.Add(up)
-		} else if c, err := stats.GetOrRegisterCounter(statsManager, upName); err == nil && c != nil {
+		} else if c, err := statsManager.GetOrRegisterCounter(upName); err == nil && c != nil {
 			c.Add(up)
 		}
 	}
 	if down > 0 {
 		if downCounter := statsManager.GetCounter(downName); downCounter != nil {
 			downCounter.Add(down)
-		} else if c, err := stats.GetOrRegisterCounter(statsManager, downName); err == nil && c != nil {
+		} else if c, err := statsManager.GetOrRegisterCounter(downName); err == nil && c != nil {
 			c.Add(down)
 		}
 	}

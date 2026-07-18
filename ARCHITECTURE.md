@@ -4,28 +4,29 @@
 
 XrayR 是一个基于 Go 语言开发的后端代理管理框架，它作为**前端管理面板**与 **Xray-core 代理核心**之间的桥梁，实现了从 V2Board 面板自动同步节点配置、用户信息和流量数据，并驱动 Xray-core 进行代理服务。
 
-- **版本**: v0.9.12
+- **版本**: v0.9.13
 - **Go 版本**: 1.26
-- **核心依赖**: Xray-core v1.260327.0
+- **核心依赖**: Xray-core v26.7.11 (`v1.260327.1-0.20260711155151-50231eaff98c`)
 - **许可证**: Mozilla Public License Version 2.0
+- **面板**: K2Board UniProxy
 
 ### 核心特性
 
-| 特性 | VLESS + REALITY | AnyTLS + TLS |
-|------|:---:|:---:|
-| 获取节点信息 | ✓ | ✓ |
-| 获取用户信息 | ✓ | ✓ |
-| 用户流量统计 | ✓ | ✓ |
-| 服务器信息上报 | ✓ | ✓ |
-| 自动申请/续签 TLS 证书 | — | ✓ |
-| 在线人数统计/IP 限制 | ✓ | ✓ |
-| 审计规则 | ✓ | ✓ |
-| 节点端口/用户限速 | ✓ | ✓ |
-| 自定义 DNS | ✓ | ✓ |
-| REALITY 无证书防探测 | ✓ | — |
-| 內建多路复用 | — | ✓ |
-| 流量填充混淆 | — | ✓ |
-| 抗主动探测 Fallback | — | ✓ |
+| 特性 | VLESS + REALITY | VLESS + TLS + XHTTP | AnyTLS + TLS |
+|------|:---:|:---:|:---:|
+| 获取节点 / 用户 / 流量 | ✓ | ✓ | ✓ |
+| 服务器信息上报 | ✓ | ✓ | ✓ |
+| 自动申请/续签 TLS 证书 | — | ✓ | ✓ |
+| 在线人数统计/IP 限制 | ✓ | ✓ | ✓ |
+| 审计规则 / 限速 | ✓ | ✓ | ✓ |
+| REALITY 无证书防探测 | ✓ | — | — |
+| REALITY minClientVer / ML-DSA / MLKEM | ✓ | — | 共享 stream* |
+| TLS + XHTTP + CDN（本地可完整覆盖） | — | ✓ | — |
+| TLS PQ 曲线默认 (X25519MLKEM768) | — | ✓ | ✓ |
+| VLESS Encryption（可选载荷 PQ） | ✓ | ✓ | — |
+| 內建多路复用 / padding / Fallback | — | — | ✓ |
+
+\* AnyTLS 使用 REALITY 传输时共享 stream 构建中的 REALITY 选项。
 
 ---
 
@@ -64,7 +65,8 @@ XrayR/
 │   ├── service.go                 # Service 接口定义
 │   └── controller/               # 节点控制器 (核心业务逻辑)
 │       ├── controller.go          # 控制器主逻辑：启动、监控、同步
-│       ├── config.go              # 控制器配置结构
+│       ├── config.go              # ControllerConfig（REALITY/XHTTP/PQ/CDN）
+│       ├── stream_resolve.go      # 传输/TLS/XHTTP/Vision 解析与构建
 │       ├── inboundbuilder.go      # 入站配置构建器
 │       ├── outboundbuilder.go     # 出站配置构建器
 │       ├── userbuilder.go         # 用户账号构建器
