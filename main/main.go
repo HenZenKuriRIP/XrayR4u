@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/HenZenKuriRIP/XrayR4u/main/tools"
 	"github.com/HenZenKuriRIP/XrayR4u/panel"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
@@ -23,7 +24,7 @@ var (
 )
 
 var (
-	version  = "0.9.13"
+	version  = "0.9.14"
 	codename = "XrayR4u"
 	intro    = "Xray backend for K2Board (VLESS + UniProxy)"
 )
@@ -65,6 +66,13 @@ func getConfig() *viper.Viper {
 }
 
 func main() {
+	// Tools mode must run before flag.Parse so xray-core command flags work.
+	// Examples: XrayR tools x25519 | XrayR vlessenc | XrayR tools help
+	if tools.IsToolsInvocation(os.Args) {
+		tools.Run(os.Args)
+		return
+	}
+
 	flag.Parse()
 	showVersion()
 	if *printVersion {

@@ -1,4 +1,4 @@
-# XrayR4u v0.9.13 VPS 部署
+# XrayR4u v0.9.14 VPS 部署
 
 ## 适用场景
 
@@ -41,6 +41,19 @@ VLESS 节点配置会写入：
 - `RealityMinClientVer: "1.8.0"`（兼容 Mihomo 等；xray-core ≥26.7.11）
 
 CDN / 后量子等进阶项见 [TLS_XHTTP_CDN_PQ.md](TLS_XHTTP_CDN_PQ.md) 与 [K2BOARD_INTEGRATION.md](K2BOARD_INTEGRATION.md)。
+
+## 密钥生成（安装脚本可选 · 节点自带 tools）
+
+安装过程中可选择生成；也可随时：
+
+```bash
+XrayR tools x25519       # REALITY PrivateKey / PublicKey
+XrayR tools mldsa65      # ML-DSA Seed + Verify
+XrayR tools vlessenc     # VLESS Encryption 成对串
+XrayR tools help
+```
+
+结果可保存到 `/etc/XrayR/keys/`（脚本选「全部生成」时自动写入）。
 
 ## 管理
 

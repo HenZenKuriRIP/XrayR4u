@@ -5,7 +5,7 @@
 
 | 项 | 当前值 |
 |---|---|
-| 节点程序 | XrayR4u **v0.9.13** |
+| 节点程序 | XrayR4u **v0.9.14** |
 | 面板协议 | K2Board UniProxy（`/api/v1/server/UniProxy/*`） |
 | 内嵌核心 | **xray-core v26.7.11** |
 | 用户体系 | UUID（VLESS / AnyTLS 复用） |
@@ -188,13 +188,16 @@ node_type=<ApiConfig.NodeType>   # 如 vless、anytls
 | VLESS Encryption | 顶层 `decryption`；订阅下发客户端 **encryption** | `none` |
 | TLS 曲线 PQ（CDN 源站） | 无需面板；节点 CertConfig 默认含 X25519MLKEM768 | 节点默认 |
 
-生成命令（运维/面板后台工具）：
+生成命令（**节点自带，与内嵌 core 同版本**；也可在面板一键生成）：
 
 ```bash
-xray x25519      # REALITY 密钥对
-xray mldsa65     # ML-DSA Seed / Verify
-xray vlessenc    # VLESS Encryption 的 decryption + encryption 成对输出
+XrayR tools x25519      # REALITY 密钥对
+XrayR tools mldsa65     # ML-DSA Seed / Verify
+XrayR tools vlessenc    # VLESS Encryption 的 decryption + encryption 成对输出
+# 短写: XrayR x25519 | XrayR mldsa65 | XrayR vlessenc
 ```
+
+安装脚本在部署末尾可选生成并保存到 `/etc/XrayR/keys/`。
 
 ---
 
@@ -383,4 +386,4 @@ Body：`{ "<uid>": ["1.2.3.4", "5.6.7.8"], ... }`
 
 ---
 
-*XrayR4u v0.9.13 · xray-core v26.7.11 · REALITY/Vision/PQ + TLS/XHTTP/CDN + AnyTLS*
+*XrayR4u v0.9.14 · xray-core v26.7.11 · REALITY/Vision/PQ + TLS/XHTTP/CDN + AnyTLS · XrayR tools*

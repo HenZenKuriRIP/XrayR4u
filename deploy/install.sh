@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # ============================================================================
-# XrayR v0.9.13 VPS 一键部署脚本
+# XrayR v0.9.14 VPS 一键部署脚本
 # 支持: Debian 12/13, Ubuntu 20.04+/22.04+/24.04+
 # 内置 xray-core v26.7.11 | VLESS + REALITY / TLS+XHTTP+CDN / AnyTLS + TLS
+# 密钥生成: XrayR tools {x25519|mldsa65|vlessenc|mlkem768|uuid}
 #
 # 用法:
 #   bash install.sh             安装 XrayR
@@ -31,7 +32,7 @@ XRAYR_BIN_DIR="/usr/local/bin"
 XRAYR_BIN_NAME="XrayR"
 XRAYR_SERVICE="/etc/systemd/system/xrayr.service"
 XRAYR_REPO="HenZenKuriRIP/XrayR4u"
-XRAYR_VERSION="v0.9.13"
+XRAYR_VERSION="v0.9.14"
 
 # ============================================================================
 # 卸载函数
@@ -195,7 +196,7 @@ clear
 echo ""
 echo -e "${CYAN}╔═══════════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║                                                   ║${NC}"
-echo -e "${CYAN}║        ${BOLD}XrayR v0.9.13 — VPS 一键部署脚本${NC}${CYAN}             ║${NC}"
+echo -e "${CYAN}║        ${BOLD}XrayR v0.9.14 — VPS 一键部署脚本${NC}${CYAN}             ║${NC}"
 echo -e "${CYAN}║   VLESS+REALITY / TLS+XHTTP+CDN / AnyTLS+TLS      ║${NC}"
 echo -e "${CYAN}║        适配 K2Board (UniProxy) 面板                 ║${NC}"
 echo -e "${CYAN}║                                                   ║${NC}"
@@ -869,7 +870,7 @@ pause 1
 cat > "$XRAYR_INSTALL_DIR/config.yml" << YML
 # ============================================================================
 # XrayR 配置文件 — 安装模式: ${INSTALL_MODE}
-# 内置 xray-core v26.7.11 | XrayR4u v0.9.13
+# 内置 xray-core v26.7.11 | XrayR4u v0.9.14
 # ============================================================================
 Log:
   Level: warning
@@ -1208,6 +1209,96 @@ fi
 pause 2
 
 # ============================================================================
+# 9b. 可选：本机生成 REALITY / PQ 密钥材料（XrayR tools，同版本 core）
+# ============================================================================
+log_step "密钥材料生成（可选 · XrayR tools）"
+pause 1
+
+KEYS_DIR="${XRAYR_INSTALL_DIR}/keys"
+XRAYR_BIN="${XRAYR_BIN_DIR}/${XRAYR_BIN_NAME}"
+
+echo -e "  ${BOLD}是否在本机生成密钥 / 后量子材料？${NC}"
+echo -e "  ${YELLOW}（使用节点自带 ${XRAYR_BIN} tools，与内嵌 xray-core 同版本）${NC}"
+echo ""
+echo -e "  ${GREEN}[1]${NC} REALITY X25519 密钥对          → x25519"
+echo -e "  ${GREEN}[2]${NC} ML-DSA-65（Seed+Verify）       → mldsa65"
+echo -e "  ${GREEN}[3]${NC} VLESS Encryption 成对串        → vlessenc（推荐 PQ 载荷）"
+echo -e "  ${GREEN}[4]${NC} 全部生成并保存到 ${KEYS_DIR}/"
+echo -e "  ${GREEN}[0]${NC} 跳过（密钥由面板一键生成亦可）"
+echo ""
+
+GEN_CHOICE=""
+while true; do
+    read -r -n 1 -p "  → " GEN_CHOICE
+    echo ""
+    case "$GEN_CHOICE" in
+        0|1|2|3|4) break ;;
+        *) log_warn "请输入 0–4" ;;
+    esac
+done
+
+run_xrayr_tools() {
+    local subcmd=$1
+    local outfile=$2
+    if [[ ! -x "$XRAYR_BIN" ]]; then
+        log_warn "找不到可执行文件: $XRAYR_BIN"
+        return 1
+    fi
+    # tools 模式不需要 config.yml
+    if [[ -n "$outfile" ]]; then
+        if "$XRAYR_BIN" tools "$subcmd" >"$outfile" 2>&1; then
+            log_info "已写入: $outfile"
+            # 同时打印摘要（前 20 行）
+            head -n 20 "$outfile" | sed 's/^/    /'
+            return 0
+        fi
+        log_warn "生成失败: $subcmd"
+        cat "$outfile" 2>/dev/null | head -n 5 | sed 's/^/    /' || true
+        return 1
+    fi
+    "$XRAYR_BIN" tools "$subcmd"
+}
+
+if [[ "$GEN_CHOICE" != "0" ]]; then
+    mkdir -p "$KEYS_DIR"
+    chmod 700 "$KEYS_DIR"
+    echo ""
+    case "$GEN_CHOICE" in
+        1)
+            run_xrayr_tools x25519 "${KEYS_DIR}/reality-x25519.txt"
+            echo -e "  ${YELLOW}→ 将 PrivateKey 填面板 private_key，Password/PublicKey 填 public_key / 订阅 pbk${NC}"
+            ;;
+        2)
+            run_xrayr_tools mldsa65 "${KEYS_DIR}/reality-mldsa65.txt"
+            echo -e "  ${YELLOW}→ Seed 填服务端 mldsa65_seed / RealityMldsa65Seed；Verify 填订阅 mldsa65Verify${NC}"
+            ;;
+        3)
+            run_xrayr_tools vlessenc "${KEYS_DIR}/vless-encryption.txt"
+            echo -e "  ${YELLOW}→ decryption 填面板/节点服务端；encryption 填客户端订阅（成对使用，勿混用两套）${NC}"
+            ;;
+        4)
+            run_xrayr_tools x25519 "${KEYS_DIR}/reality-x25519.txt"
+            echo ""
+            run_xrayr_tools mldsa65 "${KEYS_DIR}/reality-mldsa65.txt"
+            echo ""
+            run_xrayr_tools vlessenc "${KEYS_DIR}/vless-encryption.txt"
+            echo ""
+            log_info "全部材料已保存到 ${KEYS_DIR}/ （权限 700）"
+            echo -e "  ${YELLOW}REALITY 密钥 / ML-DSA / Encryption 请按文件说明填入面板或 config.yml${NC}"
+            ;;
+    esac
+    echo ""
+    echo -e "  ${CYAN}以后可随时手动生成：${NC}"
+    echo -e "  ${GREEN}${XRAYR_BIN} tools x25519${NC}"
+    echo -e "  ${GREEN}${XRAYR_BIN} tools mldsa65${NC}"
+    echo -e "  ${GREEN}${XRAYR_BIN} tools vlessenc${NC}"
+    echo -e "  ${GREEN}${XRAYR_BIN} tools help${NC}"
+else
+    log_info "已跳过本机密钥生成（可使用面板一键生成，或稍后 XrayR tools）"
+fi
+pause 2
+
+# ============================================================================
 # 10. 启动服务
 # ============================================================================
 log_step "第十二步：启动 XrayR 服务"
@@ -1275,6 +1366,15 @@ echo -e "  ${GREEN}journalctl -u xrayr -f${NC}      查看实时日志"
 echo -e "  ${GREEN}ss -tlnp | grep XrayR${NC}       查看监听端口"
 echo -e "  ${GREEN}systemctl restart xrayr${NC}     重启服务"
 echo -e "  ${GREEN}vi ${XRAYR_INSTALL_DIR}/config.yml${NC}   编辑配置"
+echo ""
+echo -e "  ${BOLD}🔑 密钥 / 后量子材料（节点自带，同版本 core）${NC}"
+echo -e "  ${GREEN}XrayR tools x25519${NC}           REALITY 密钥对"
+echo -e "  ${GREEN}XrayR tools mldsa65${NC}          ML-DSA Seed + Verify"
+echo -e "  ${GREEN}XrayR tools vlessenc${NC}         VLESS Encryption 成对串"
+echo -e "  ${GREEN}XrayR tools help${NC}             全部 tools 说明"
+if [[ -d "${XRAYR_INSTALL_DIR}/keys" ]]; then
+echo -e "  ${YELLOW}安装时生成的材料: ${XRAYR_INSTALL_DIR}/keys/${NC}"
+fi
 echo ""
 pause 2
 

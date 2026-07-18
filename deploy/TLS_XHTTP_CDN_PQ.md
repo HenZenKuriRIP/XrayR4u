@@ -219,13 +219,16 @@ xray vlessenc
 
 ---
 
-## 8. 生成密钥速查
+## 8. 生成密钥速查（节点自带 · 同版本 core）
 
 ```bash
-xray vlessenc     # VLESS Encryption 服务端 decryption + 客户端 encryption
-xray x25519       # 通用 X25519（REALITY 用；本组合非必须）
-xray mlkem768     # 底层 ML-KEM 材料（vlessenc 已封装）
+XrayR tools vlessenc     # VLESS Encryption 服务端 decryption + 客户端 encryption
+XrayR tools x25519       # 通用 X25519（REALITY 用；本 CDN 组合非必须）
+XrayR tools mlkem768     # 底层 ML-KEM 材料（vlessenc 已封装）
+XrayR tools help
 ```
+
+无需再单独安装 `xray` 二进制。
 
 ---
 
