@@ -32,6 +32,9 @@ const (
 	// HTTPS server. Kept short so that a misconfigured fallback address does not
 	// cause the probe handler to stall the goroutine pool.
 	fallbackDialTimeout = 5 * time.Second
+	// fallbackRelayTimeout bounds the full request/response copy so hung
+	// clients or upstreams cannot pin goroutines and FDs forever (DoS).
+	fallbackRelayTimeout = 30 * time.Second
 )
 
 func init() {
@@ -44,7 +47,6 @@ func init() {
 type Server struct {
 	service    *singanytls.Service
 	dispatcher routing.Dispatcher
-	users      []User
 }
 
 // NewServer creates a new anytls Server from protobuf config.
@@ -90,8 +92,8 @@ func NewServer(ctx context.Context, config *Config) (*Server, error) {
 }
 
 // UpdateUsers replaces the full user table in the underlying sing-anytls service.
+// Auth state lives entirely inside sing-anytls (atomic); no local copy is kept.
 func (s *Server) UpdateUsers(users []User) {
-	s.users = users
 	singUsers := make([]singanytls.User, len(users))
 	for i, u := range users {
 		singUsers[i] = singanytls.User{Name: u.Name, Password: u.Password}
@@ -226,6 +228,10 @@ func (h *fallbackDialerHandler) relay(client, upstream net.Conn, onClose N.Close
 		}
 	}()
 
+	deadline := time.Now().Add(fallbackRelayTimeout)
+	_ = client.SetDeadline(deadline)
+	_ = upstream.SetDeadline(deadline)
+
 	// Extract the cached HTTP request from the CachedConn. sing-anytls
 	// buffers the entire initial read and resets the cursor via b.Resize(0,n),
 	// so the buffer replays the full original HTTP request.
@@ -234,7 +240,7 @@ func (h *fallbackDialerHandler) relay(client, upstream net.Conn, onClose N.Close
 	// waiting for a response, not sending more data).
 	if cc, ok := client.(*bufio.CachedConn); ok {
 		if cached := cc.ReadCached(); cached != nil {
-			upstream.Write(cached.Bytes())
+			_, _ = upstream.Write(cached.Bytes())
 			cached.Release()
 		}
 	}
@@ -242,10 +248,11 @@ func (h *fallbackDialerHandler) relay(client, upstream net.Conn, onClose N.Close
 	// Signal nginx that the request is complete. Without this half-close,
 	// nginx waits indefinitely for a request body that never arrives.
 	if tc, ok := upstream.(*net.TCPConn); ok {
-		tc.CloseWrite()
+		_ = tc.CloseWrite()
 	}
 
 	// Copy nginx's HTTP response back to curl (through xray-core TLS).
+	// Deadlines above ensure hung peers cannot pin this goroutine forever.
 	_, _ = io.Copy(client, upstream)
 }
 

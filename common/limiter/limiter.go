@@ -171,8 +171,8 @@ func (l *Limiter) DeleteInboundLimiter(tag string) error {
 }
 
 // GetOnlineDevice collects currently online users for a tag without clearing
-// the live device-limit state. Empty per-user trackers are pruned to avoid
-// unbounded map growth.
+// live device-limit state and without pruning rate-limit buckets (reporting
+// must not reset token-bucket burst windows).
 func (l *Limiter) GetOnlineDevice(tag string) (*[]api.OnlineUser, error) {
 	v, ok := l.inboundInfo.Load(tag)
 	if !ok {
@@ -188,15 +188,29 @@ func (l *Limiter) GetOnlineDevice(tag string) (*[]api.OnlineUser, error) {
 		for ip, uid := range m {
 			onlineUsers = append(onlineUsers, api.OnlineUser{UID: uid, IP: ip})
 		}
-		if len(m) == 0 {
-			// No live connections — clean up idle bucket and stale entry.
+		return true
+	})
+
+	return &onlineUsers, nil
+}
+
+// PruneStaleEntries removes empty online-IP trackers and their rate-limit
+// buckets for a tag. Call periodically from a maintenance path, not from
+// GetOnlineDevice reporting (which must not reset token buckets).
+func (l *Limiter) PruneStaleEntries(tag string) {
+	v, ok := l.inboundInfo.Load(tag)
+	if !ok {
+		return
+	}
+	info := v.(*InboundInfo)
+	info.onlineIPs.Range(func(key, value any) bool {
+		state := value.(*userOnlineState)
+		if len(state.copyAll()) == 0 {
 			info.bucketHub.Delete(key.(string))
 			info.onlineIPs.Delete(key.(string))
 		}
 		return true
 	})
-
-	return &onlineUsers, nil
 }
 
 // RemoveOnlineIP releases one connection/stream reference for the given IP.

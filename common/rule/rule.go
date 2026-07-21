@@ -4,7 +4,6 @@ package rule
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -62,11 +61,35 @@ func New() *RuleManager {
 func (r *RuleManager) UpdateRule(tag string, newRuleList []api.DetectRule) error {
 	if v, loaded := r.inboundRule.LoadOrStore(tag, newRuleList); loaded {
 		oldRuleList := v.([]api.DetectRule)
-		if !reflect.DeepEqual(oldRuleList, newRuleList) {
+		if !detectRulesEqual(oldRuleList, newRuleList) {
 			r.inboundRule.Store(tag, newRuleList)
 		}
 	}
 	return nil
+}
+
+// detectRulesEqual compares rule ID and pattern source text only — not the
+// internal *regexp.Regexp state (DeepEqual is expensive and unstable).
+func detectRulesEqual(a, b []api.DetectRule) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].ID != b[i].ID {
+			return false
+		}
+		as, bs := "", ""
+		if a[i].Pattern != nil {
+			as = a[i].Pattern.String()
+		}
+		if b[i].Pattern != nil {
+			bs = b[i].Pattern.String()
+		}
+		if as != bs {
+			return false
+		}
+	}
+	return true
 }
 
 // GetDetectResult atomically drains and returns all detection results for tag.
