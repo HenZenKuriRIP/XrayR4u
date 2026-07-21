@@ -130,8 +130,9 @@ func main() {
 	runtime.GC()
 
 	// Block until an OS termination signal is received.
+	// Note: SIGKILL (os.Kill) cannot be caught; do not register it.
 	osSignals := make(chan os.Signal, 1)
-	signal.Notify(osSignals, os.Interrupt, os.Kill, syscall.SIGTERM)
+	signal.Notify(osSignals, os.Interrupt, syscall.SIGTERM)
 	<-osSignals
 
 	// Close reloadCh so the reload goroutine exits cleanly.

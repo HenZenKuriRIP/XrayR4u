@@ -37,3 +37,11 @@ func (r *SizeStatReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	}
 	return mb, err
 }
+
+func (r *SizeStatReader) Close() error {
+	return common.Close(r.Reader)
+}
+
+func (r *SizeStatReader) Interrupt() {
+	common.Interrupt(r.Reader)
+}

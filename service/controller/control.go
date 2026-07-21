@@ -52,7 +52,7 @@ func (c *Controller) addOutbound(config *core.OutboundHandlerConfig) error {
 	}
 	handler, ok := rawHandler.(outbound.Handler)
 	if !ok {
-		return fmt.Errorf("not an InboundHandler: %s", err)
+		return fmt.Errorf("not an OutboundHandler: %s", err)
 	}
 	if err := outboundManager.AddHandler(context.Background(), handler); err != nil {
 		return err
@@ -182,7 +182,11 @@ func (c *Controller) DeleteUsersFromLimiter(tag string, deletedUsers []api.UserI
 
 func (c *Controller) GetOnlineDevice(tag string) (*[]api.OnlineUser, error) {
 	dispather := c.server.GetFeature(routing.DispatcherType()).(*mydispatcher.DefaultDispatcher)
-	return dispather.Limiter.GetOnlineDevice(tag)
+	users, err := dispather.Limiter.GetOnlineDevice(tag)
+	// Maintenance prune separate from reporting so rate-limit buckets are not
+	// reset as a side effect of online-user push.
+	dispather.Limiter.PruneStaleEntries(tag)
+	return users, err
 }
 
 func (c *Controller) UpdateRule(tag string, newRuleList []api.DetectRule) error {

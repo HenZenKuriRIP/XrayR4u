@@ -79,42 +79,52 @@ func New(apiConfig *api.Config) *APIClient {
 
 // readLocalRuleList reads the local rule list file
 func readLocalRuleList(path string) (LocalRuleList []api.DetectRule) {
-
 	LocalRuleList = make([]api.DetectRule, 0)
-	if path != "" {
-		// open the file
-		file, err := os.Open(path)
-
-		//handle errors while opening
-		if err != nil {
-			log.Printf("Error when opening file: %s", err)
-			return LocalRuleList
-		}
-
-		fileScanner := bufio.NewScanner(file)
-
-		// read line by line
-		for fileScanner.Scan() {
-			LocalRuleList = append(LocalRuleList, api.DetectRule{
-				ID:      -1,
-				Pattern: regexutil.SafeCompileOrDefault(fileScanner.Text()),
-			})
-		}
-		// handle first encountered error while reading
-		if err := fileScanner.Err(); err != nil {
-			log.Fatalf("Error while reading file: %s", err)
-			return make([]api.DetectRule, 0)
-		}
-
-		file.Close()
+	if path == "" {
+		return LocalRuleList
 	}
 
+	file, err := os.Open(path)
+	if err != nil {
+		log.Printf("Error when opening rule list file: %s", err)
+		return LocalRuleList
+	}
+	defer file.Close()
+
+	fileScanner := bufio.NewScanner(file)
+	for fileScanner.Scan() {
+		LocalRuleList = append(LocalRuleList, api.DetectRule{
+			ID:      -1,
+			Pattern: regexutil.SafeCompileOrDefault(fileScanner.Text()),
+		})
+	}
+	// Optional local rules must not kill the process on read errors.
+	if err := fileScanner.Err(); err != nil {
+		log.Printf("Error while reading rule list file: %s", err)
+		return make([]api.DetectRule, 0)
+	}
 	return LocalRuleList
 }
 
-// Describe return a description of the client
+// Describe return a description of the client.
+// Key is redacted so accidental logging/serialization cannot leak the API token.
 func (c *APIClient) Describe() api.ClientInfo {
-	return api.ClientInfo{APIHost: c.APIHost, NodeID: c.NodeID, Key: c.Key, NodeType: c.NodeType}
+	return api.ClientInfo{
+		APIHost:  c.APIHost,
+		NodeID:   c.NodeID,
+		Key:      redactKey(c.Key),
+		NodeType: c.NodeType,
+	}
+}
+
+func redactKey(key string) string {
+	if key == "" {
+		return ""
+	}
+	if len(key) <= 4 {
+		return "****"
+	}
+	return key[:4] + "****"
 }
 
 // Debug set the client debug for client
@@ -139,7 +149,13 @@ func (c *APIClient) parseResponse(res *resty.Response, path string, err error) (
 	}
 	if res.StatusCode() >= 400 {
 		body := res.Body()
-		return nil, fmt.Errorf("request %s failed: %s", c.assembleURL(path), string(body))
+		// Cap body length so error logs cannot dump large/sensitive panel responses.
+		const maxBody = 256
+		msg := string(body)
+		if len(msg) > maxBody {
+			msg = msg[:maxBody] + "…"
+		}
+		return nil, fmt.Errorf("request %s failed: status=%d body=%s", c.assembleURL(path), res.StatusCode(), msg)
 	}
 	rtn, err := simplejson.NewJson(res.Body())
 	if err != nil {
@@ -327,6 +343,9 @@ func (c *APIClient) ReportIllegal(detectResultList *[]api.DetectResult) error {
 //	}
 func (c *APIClient) ParseUniProxyNodeResponse(response *simplejson.Json) (*api.NodeInfo, error) {
 	port := response.Get("server_port").MustInt()
+	if port <= 0 || port > 65535 {
+		return nil, fmt.Errorf("invalid server_port %d (must be 1-65535)", port)
+	}
 	network := response.Get("network").MustString()
 	if network == "" {
 		network = "tcp"
