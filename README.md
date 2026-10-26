@@ -3,7 +3,7 @@
 [![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-MPL%202.0-blue.svg)](LICENSE)
 [![Xray-core](https://img.shields.io/badge/Xray--core-v26.7.11-red.svg)](https://github.com/XTLS/Xray-core)
-[![Release](https://img.shields.io/badge/release-v0.9.15-brightgreen.svg)](https://github.com/HenZenKuriRIP/XrayR4u/releases)
+[![Release](https://img.shields.io/badge/release-v0.9.16-brightgreen.svg)](https://github.com/HenZenKuriRIP/XrayR4u/releases)
 
 XrayR4u 是 [XrayR](https://github.com/XrayR-project/XrayR) 的社区维护分支：Go 语言后端代理管理框架，作为 **K2Board 面板** 与 **Xray-core** 之间的桥梁。
 
@@ -43,7 +43,7 @@ XrayR4u 是 [XrayR](https://github.com/XrayR-project/XrayR) 的社区维护分�
 
 | 项目 | 版本 |
 |------|------|
-| XrayR4u | **v0.9.15** |
+| XrayR4u | **v0.9.16** |
 | Xray-core | **v26.7.11** |
 | Go | 1.26+ |
 
@@ -85,7 +85,7 @@ bash <(curl -sSL https://raw.githubusercontent.com/HenZenKuriRIP/XrayR4u/main/de
 
 ```bash
 # 示例：linux amd64
-curl -sSL -o XrayR https://github.com/HenZenKuriRIP/XrayR4u/releases/download/v0.9.15/XrayR-linux-amd64
+curl -sSL -o XrayR https://github.com/HenZenKuriRIP/XrayR4u/releases/download/v0.9.16/XrayR-linux-amd64
 chmod +x XrayR
 # 与 install.sh 同目录后执行 bash install.sh（脚本优先用本地二进制）
 ```

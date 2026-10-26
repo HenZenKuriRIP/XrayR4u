@@ -5,7 +5,7 @@
 
 | 项 | 当前值 |
 |---|---|
-| 节点程序 | XrayR4u **v0.9.15** |
+| 节点程序 | XrayR4u **v0.9.16** |
 | 面板协议 | K2Board UniProxy（`/api/v1/server/UniProxy/*`） |
 | 内嵌核心 | **xray-core v26.7.11** |
 | 用户体系 | UUID（VLESS / AnyTLS 复用） |
@@ -479,4 +479,4 @@ Body：`{ "<uid>": ["1.2.3.4", "5.6.7.8"], ... }`
 
 ---
 
-*XrayR4u v0.9.15 · xray-core v26.7.11 · REALITY/Vision/PQ + TLS/XHTTP/CDN + AnyTLS · UniProxy rule/illegal · Header 鉴权 · XrayR tools*
+*XrayR4u v0.9.16 · xray-core v26.7.11 · REALITY/Vision/PQ + TLS/XHTTP/CDN + AnyTLS · UniProxy rule/illegal · Header 鉴权 · XrayR tools*
