@@ -112,6 +112,12 @@ func (s *Session) IsClosed() bool {
 	}
 }
 
+// SetCloseHook registers a callback invoked exactly once when the session is
+// closed. Safe to call before Run; replaces any previous hook.
+func (s *Session) SetCloseHook(fn func()) {
+	s.dieHook = fn
+}
+
 // Close is used to close the session and all streams.
 func (s *Session) Close() error {
 	var once bool

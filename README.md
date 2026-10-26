@@ -71,6 +71,16 @@ bash <(curl -sSL https://raw.githubusercontent.com/HenZenKuriRIP/XrayR4u/main/de
 
 交互输入面板地址、Token、节点 ID，选择协议后自动安装。
 
+### 可选：WARP 解锁 AI / 流媒体
+
+主程序部署完成后，可单独安装（不改 `install.sh`、不改系统默认路由）：
+
+```bash
+bash <(curl -sSL https://raw.githubusercontent.com/HenZenKuriRIP/XrayR4u/main/deploy/install-warp.sh) --install
+```
+
+使用 wgcf 注册 WARP + Xray 内嵌 WireGuard 出站，同步写入 `route.json` / `custom_outbound.json`。说明见 [deploy/WARP_README.md](deploy/WARP_README.md)。
+
 ### 从 Release 安装二进制
 
 ```bash
@@ -86,8 +96,20 @@ chmod +x XrayR
 git clone https://github.com/HenZenKuriRIP/XrayR4u.git
 cd XrayR4u
 go mod download
+# 本机架构
 CGO_ENABLED=0 go build -v -o XrayR -trimpath -ldflags "-s -w -buildid=" ./main
+
+# 交叉编译 Linux amd64（常见 VPS）
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -buildid=" -o XrayR-linux-amd64 ./main
 ```
+
+将 `XrayR-linux-amd64` 拷到节点后 `chmod +x`，替换旧二进制并 `systemctl restart xrayr`。
+
+### 面板升级后更新节点
+
+审计 / Header 鉴权等能力：**先升级 K2Board 面板，再替换节点二进制即可**。  
+一般**不必**改用户订阅或 `config.yml` 中的 ApiKey 字段（密钥已改为 Header 发送）。  
+详见 [deploy/K2BOARD_INTEGRATION.md](deploy/K2BOARD_INTEGRATION.md) §2。
 
 ## 文档
 
@@ -96,7 +118,7 @@ CGO_ENABLED=0 go build -v -o XrayR -trimpath -ldflags "-s -w -buildid=" ./main
 | [INSTALL.md](INSTALL.md) | 安装与配置详解 |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 代码架构 |
 | [deploy/README.md](deploy/README.md) | VPS 部署与脚本 |
-| [deploy/K2BOARD_INTEGRATION.md](deploy/K2BOARD_INTEGRATION.md) | **K2Board 对接参考** |
+| [deploy/K2BOARD_INTEGRATION.md](deploy/K2BOARD_INTEGRATION.md) | **K2Board 对接参考**（含审计 rule/illegal） |
 | [deploy/TLS_XHTTP_CDN_PQ.md](deploy/TLS_XHTTP_CDN_PQ.md) | CDN / XHTTP / 后量子节点运维 |
 
 ## 项目结构

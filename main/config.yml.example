@@ -17,14 +17,14 @@ Nodes:
     PanelType: "V2board"
     ApiConfig:
       ApiHost: "https://your-panel.com"
-      ApiKey: "your-api-token"
+      ApiKey: "your-api-token" # Sent as Authorization: Bearer + X-Api-Key (not URL query)
       NodeID: 1
-      NodeType: Vless # K2Board UniProxy interface (VLESS only)
+      NodeType: Vless # K2Board UniProxy (Vless / anytls)
       Timeout: 30 # Timeout for the api request
       EnableReality: true # Enable REALITY security (recommended)
       SpeedLimit: 0 # Mbps, Local settings will replace remote settings, 0 means disable
       DeviceLimit: 0 # Local settings will replace remote settings, 0 means disable
-      RuleListPath: # /etc/XrayR/rulelist Path to local rulelist file
+      RuleListPath: # /etc/XrayR/rulelist # Local rules (id=-1), merged with panel GET /rule
     ControllerConfig:
       ListenIP: 0.0.0.0 # IP address you want to listen
       SendIP: 0.0.0.0 # IP address you want to send pacakage

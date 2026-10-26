@@ -271,6 +271,10 @@ func buildAnyTLSHandlerConfig(config *Config, nodeInfo *api.NodeInfo, tag string
 	// NewServer falls back to padding.DefaultPaddingScheme.
 	// FallbackAddr (H-1) is forwarded to NewServer so it can wire the
 	// fallback dialer handler for active-probing resistance.
+	// Validate early so a bad config fails at inbound build, not at first probe.
+	if err := anytls.ValidateFallbackAddr(config.AnyTLSFallback); err != nil {
+		return nil, err
+	}
 	proxySettings := serial.ToTypedMessage(&anytls.Config{
 		PaddingScheme: []byte(config.AnyTLSPaddingScheme),
 		FallbackAddr:  config.AnyTLSFallback,

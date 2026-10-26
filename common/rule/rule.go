@@ -12,36 +12,35 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 )
 
-// detectResultSet is a thread-safe set of api.DetectResult values.
-// api.DetectResult must be comparable (no slice/map fields) to be used as a map key.
+type detectKey struct {
+	UID    int
+	RuleID int
+}
+
+// detectResultSet is a thread-safe counter of (uid, rule_id) hits.
 type detectResultSet struct {
 	mu      sync.Mutex
-	entries map[api.DetectResult]struct{}
+	entries map[detectKey]int
 }
 
 func newDetectResultSet() *detectResultSet {
-	return &detectResultSet{entries: make(map[api.DetectResult]struct{})}
+	return &detectResultSet{entries: make(map[detectKey]int)}
 }
 
-// add inserts r and reports whether it was a new entry.
-func (s *detectResultSet) add(r api.DetectResult) bool {
+func (s *detectResultSet) add(uid, ruleID int) {
 	s.mu.Lock()
-	_, exists := s.entries[r]
-	if !exists {
-		s.entries[r] = struct{}{}
-	}
+	s.entries[detectKey{UID: uid, RuleID: ruleID}]++
 	s.mu.Unlock()
-	return !exists
 }
 
-// drainAll removes and returns all entries.
+// drainAll removes and returns all entries with counts.
 func (s *detectResultSet) drainAll() []api.DetectResult {
 	s.mu.Lock()
 	out := make([]api.DetectResult, 0, len(s.entries))
-	for r := range s.entries {
-		out = append(out, r)
+	for k, n := range s.entries {
+		out = append(out, api.DetectResult{UID: k.UID, RuleID: k.RuleID, Count: n})
 	}
-	s.entries = make(map[api.DetectResult]struct{})
+	s.entries = make(map[detectKey]int)
 	s.mu.Unlock()
 	return out
 }
@@ -137,17 +136,15 @@ func (r *RuleManager) Detect(tag string, destination string, email string) bool 
 		return true // still reject, just can't record
 	}
 
-	result := api.DetectResult{UID: uid, RuleID: hitRuleID}
-
 	// Fast path: set already exists for this tag – no allocation needed.
 	if sv, ok := r.inboundDetectResult.Load(tag); ok {
-		sv.(*detectResultSet).add(result)
+		sv.(*detectResultSet).add(uid, hitRuleID)
 		return true
 	}
 	// Slow path: first hit for this tag, create and race to store.
 	newSet := newDetectResultSet()
 	actual, _ := r.inboundDetectResult.LoadOrStore(tag, newSet)
-	actual.(*detectResultSet).add(result)
+	actual.(*detectResultSet).add(uid, hitRuleID)
 
 	return true
 }

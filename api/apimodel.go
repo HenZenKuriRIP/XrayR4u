@@ -98,4 +98,7 @@ type DetectRule struct {
 type DetectResult struct {
 	UID    int
 	RuleID int
+	// Count is optional aggregated hits in the report window (0/omit means 1).
+	// Not used as a map key in RuleManager — counts are stored separately.
+	Count int `json:"count,omitempty"`
 }

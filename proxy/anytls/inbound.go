@@ -70,8 +70,13 @@ func NewServer(ctx context.Context, config *Config) (*Server, error) {
 	// to be rejected immediately, which is a clear active-probing fingerprint.
 	// When FallbackAddr is configured, probes are silently forwarded to a real
 	// HTTPS server, making this port indistinguishable from normal TLS traffic.
+	// Address is validated here so a misconfigured / malicious target cannot
+	// turn the node into an open TCP relay toward cloud metadata endpoints.
 	var fallbackHandler N.TCPConnectionHandlerEx
 	if addr := config.GetFallbackAddr(); addr != "" {
+		if err := ValidateFallbackAddr(addr); err != nil {
+			return nil, err
+		}
 		fallbackHandler = &fallbackDialerHandler{addr: addr}
 	}
 
@@ -199,9 +204,21 @@ type fallbackDialerHandler struct {
 // immediately; the copy goroutines run in the background and close both sides
 // when the transfer completes or either peer closes the connection.
 func (h *fallbackDialerHandler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.Socksaddr, destination M.Socksaddr, onClose N.CloseHandlerFunc) {
+	// Re-check at dial time (blocks DNS rebinding onto metadata IPs).
+	if err := resolveAndCheckFallback(h.addr); err != nil {
+		errors.LogInfo(ctx, "anytls fallback blocked: ", err)
+		conn.Close()
+		if onClose != nil {
+			onClose(err)
+		}
+		return
+	}
 	upstream, err := net.DialTimeout("tcp", h.addr, fallbackDialTimeout)
 	if err != nil {
 		conn.Close()
+		if onClose != nil {
+			onClose(err)
+		}
 		return
 	}
 	// Must block until the relay completes: if this method returns, NewConnection

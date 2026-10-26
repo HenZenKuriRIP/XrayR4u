@@ -303,20 +303,19 @@ type API interface {
 }
 ```
 
-#### 四种面板实现对比
+#### K2Board / UniProxy（`api/v2board`）实现要点
 
-| 功能 | V2Board |
-|------|---------|
-| 认证方式 | URL Query 参数 `key` | URL Query 参数 `token` | HTTP Header `key` + `timestamp` | HTTP Header `key` |
-| 请求库 | resty | resty | resty | resty |
-| 响应解析 | JSON 反序列化 | simplejson 动态解析 | JSON 反序列化 | JSON 反序列化 |
-| 节点状态上报 | ✓ | ✓ | ✓ | ✗ (空实现) |
-| 在线用户上报 | ✓ | ✗ (空实现) | ✓ | ✓ |
-| 审计规则 | 远程 + 本地文件 | 远程(仅V2ray) + 本地文件 | 远程(仅 reject 模式) + 本地文件 | 远程 + 本地文件 |
-| 违规上报 | ✓ | ✗ (空实现) | ✓ | ✗ (空实现) |
-| Shadowsocks | 单端口多用户 | 标准端口 | 标准端口 | 标准端口 |
-| REALITY 协议 | ✓ (EnableReality) | ✓ (面板下发配置) | ✓ | ✓ |
-| VLESS Vision | ✓ (EnableVision) | ✓ (自动判定) | ✓ | ✓ |
+| 功能 | 实现 |
+|------|------|
+| 认证方式 | **`Authorization: Bearer`** + **`X-Api-Key`**；Query 仅 `node_id` / `node_type`（**不**再带 `token=`） |
+| 请求库 | resty |
+| 响应解析 | simplejson 动态解析 |
+| 节点配置 / 用户 | `GET .../config`、`GET .../user` |
+| 流量 / 状态 / 在线 | `POST .../push`、`.../status`、`.../alive` |
+| 审计规则 | `GET .../rule` + 本地 `RuleListPath`；version 缓存；失败用上次缓存 |
+| 违规上报 | `POST .../illegal`（本地 count 聚合）；成功后解析可选 `kick_uids` / `disable_uids` |
+| 本地拦截 | `app/mydispatcher` → `common/rule.RuleManager.Detect`（热路径，先于出站） |
+| REALITY / Vision / AnyTLS | 面板字段 + `ControllerConfig` 本地覆盖 |
 
 #### 通用数据模型
 

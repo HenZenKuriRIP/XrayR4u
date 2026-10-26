@@ -79,6 +79,8 @@ Nodes:
       ApiHost: "https://your-panel.com"
 
       # [必填] 面板通信密钥 (token)
+      # 节点以 Header 发送: Authorization: Bearer <ApiKey> 与 X-Api-Key
+      # （不再使用 URL Query token=，避免 access log 泄露）
       ApiKey: "your-api-token"
 
       # [必填] 面板中的节点 ID
@@ -102,7 +104,9 @@ Nodes:
       # [可选] 每用户设备连接数限制，0 = 不限制
       DeviceLimit: 0
 
-      # [可选] 本地审计规则文件路径，每行一个正则表达式
+      # [可选] 本地审计规则文件路径，每行一个正则表达式 (id=-1)
+      # 与面板 GET /UniProxy/rule 合并；命中后本地拒绝，周期 POST /illegal 上报面板
+      # 详见 deploy/K2BOARD_INTEGRATION.md §2.2–2.3
       RuleListPath: # /etc/XrayR/rulelist
 
     ControllerConfig:
@@ -124,7 +128,8 @@ Nodes:
       # [可选] 是否禁用流量上报
       DisableUploadTraffic: false
 
-      # [可选] 是否禁用审计规则获取
+      # [可选] 是否禁用审计规则获取（true 时不拉面板 /rule，仅本地 RuleListPath）
+      # 对接 K2Board 审计时请保持 false
       DisableGetRule: false
 
       # [可选] 是否禁用节点状态上报 (CPU/内存/磁盘/运行时间)
@@ -246,7 +251,8 @@ Nodes:
   #   ControllerConfig:
   #     ListenIP: 0.0.0.0
   #     UpdatePeriodic: 60
-  #     # 抗主动探测 Fallback: 非法连接转发到此地址（必配！）
+  #     # 抗主动探测 Fallback: 非法连接转发到此地址（推荐配置）
+  #     # 格式 host:port；允许 127.0.0.1/内网；禁止云 metadata 地址（SSRF 防护）
   #     # 指向本机 nginx/caddy 的 HTTPS 端口，如 127.0.0.1:8443
   #     AnyTLSFallback: "127.0.0.1:8443"
   #     # 自定义 padding 方案（可选，不填则用默认方案）。

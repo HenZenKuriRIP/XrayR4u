@@ -144,14 +144,12 @@ func (c *Controller) Start() error {
 		log.Print(err)
 	}
 
-	// Add Rule Manager
+	// Add Rule Manager — apply even when empty so panel "rules":[] clears prior rules.
 	if !c.config.DisableGetRule {
 		if ruleList, err := c.apiClient.GetNodeRule(); err != nil {
 			log.Printf("Get rule list failed: %s", err)
-		} else if len(*ruleList) > 0 {
-			if err := c.UpdateRule(tag, *ruleList); err != nil {
-				log.Print(err)
-			}
+		} else if err := c.UpdateRule(tag, *ruleList); err != nil {
+			log.Print(err)
 		}
 	}
 
@@ -236,14 +234,13 @@ func (c *Controller) nodeInfoMonitor() error {
 	}
 
 	// Check Rule – read Tag under lock.
+	// Always replace (including empty) so removed panel rules stop intercepting.
 	currentTag := c.getState().tag
 	if !c.config.DisableGetRule {
 		if ruleList, err := c.apiClient.GetNodeRule(); err != nil {
 			log.Printf("Get rule list failed: %s", err)
-		} else if len(*ruleList) > 0 {
-			if err := c.UpdateRule(currentTag, *ruleList); err != nil {
-				log.Print(err)
-			}
+		} else if err := c.UpdateRule(currentTag, *ruleList); err != nil {
+			log.Print(err)
 		}
 	}
 
@@ -604,19 +601,101 @@ func (c *Controller) userInfoMonitor() error {
 		}
 	}
 
-	// Report Illegal user
+	// Report Illegal (local Detect already rejected the connection on the hot path).
+	// HTTP runs only on this periodic task — never blocks proxy forwarding.
 	if detectResult, err := c.GetDetectResult(tag); err != nil {
 		log.Print(err)
 	} else if len(*detectResult) > 0 {
+		totalHits := 0
+		for _, r := range *detectResult {
+			if r.Count > 0 {
+				totalHits += r.Count
+			} else {
+				totalHits++
+			}
+		}
 		if err = c.apiClient.ReportIllegal(detectResult); err != nil {
-			log.Print(err)
+			// Hits already drained locally; discard on failure per panel contract
+			// (no retry queue — must not stall reporting). Next window starts clean.
+			log.Printf("[%s] ReportIllegal failed (%d entries, %d hits): %s",
+				tag, len(*detectResult), totalHits, err)
 		} else {
 			s := c.getState()
-			log.Printf("[%s: %d] Report %d illegal behaviors",
-				s.nodeInfo.NodeType, s.nodeInfo.NodeID, len(*detectResult))
+			log.Printf("[%s: %d] Report %d illegal behaviors (%d hits) to panel",
+				s.nodeInfo.NodeType, s.nodeInfo.NodeID, len(*detectResult), totalHits)
+			// P3 optional: kick_uids / disable_uids — default empty, no user impact.
+			c.applyIllegalKickUIDs(tag)
 		}
 	}
 	return nil
+}
+
+// applyIllegalKickUIDs disconnects users listed by panel policy after a successful
+// illegal report. No-op when the list is empty (default panel policy).
+// Does not touch subscription tokens; only drops node-side sessions until the
+// next /user pull (disabled users will not reappear).
+func (c *Controller) applyIllegalKickUIDs(tag string) {
+	type kicker interface{ TakeKickUIDs() []int }
+	k, ok := c.apiClient.(kicker)
+	if !ok {
+		return
+	}
+	uids := k.TakeKickUIDs()
+	if len(uids) == 0 {
+		return
+	}
+	users := c.getUserList()
+	if len(users) == 0 {
+		return
+	}
+	kickSet := make(map[int]struct{}, len(uids))
+	for _, id := range uids {
+		if id > 0 {
+			kickSet[id] = struct{}{}
+		}
+	}
+	if len(kickSet) == 0 {
+		return
+	}
+	kept := make([]api.UserInfo, 0, len(users))
+	deleted := make([]api.UserInfo, 0)
+	for _, u := range users {
+		if _, drop := kickSet[u.UID]; drop {
+			deleted = append(deleted, u)
+			continue
+		}
+		kept = append(kept, u)
+	}
+	if len(deleted) == 0 {
+		return
+	}
+	s := c.getState()
+	if s.nodeInfo != nil && strings.EqualFold(s.nodeInfo.NodeType, "anytls") {
+		// Full replace + session kick for revoked passwords (UpdateUsers).
+		if server, err := c.getAnyTLSServer(tag); err != nil {
+			log.Printf("illegal kick anytls: %s", err)
+		} else {
+			server.UpdateUsers(c.buildAnyTLSUser(&kept))
+		}
+	} else {
+		emails := make([]string, len(deleted))
+		for i, u := range deleted {
+			emails[i] = fmt.Sprintf("%s|%s|%d", tag, u.Email, u.UID)
+		}
+		if err := c.removeUsers(emails, tag); err != nil {
+			log.Printf("illegal kick removeUsers: %s", err)
+		}
+	}
+	if err := c.DeleteUsersFromLimiter(tag, deleted); err != nil {
+		log.Print(err)
+	}
+	// Local list until next panel /user sync
+	c.setUserList(kept)
+	nt, nid := "?", 0
+	if s.nodeInfo != nil {
+		nt, nid = s.nodeInfo.NodeType, s.nodeInfo.NodeID
+	}
+	log.Printf("[%s: %d] policy kick/disable %d user(s) after illegal report", nt, nid, len(deleted))
 }
 
 // buildNodeTag is a pure function – no receiver needed.

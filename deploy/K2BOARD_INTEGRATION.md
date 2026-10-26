@@ -45,16 +45,104 @@
 | POST | `/api/v1/server/UniProxy/push` | 节点 → 面板 | 用户流量 |
 | POST | `/api/v1/server/UniProxy/status` | 节点 → 面板 | CPU/内存/磁盘/在线 IP 等 |
 | POST | `/api/v1/server/UniProxy/alive` | 节点 → 面板 | 在线用户 IP |
+| GET | `/api/v1/server/UniProxy/rule` | 面板 → 节点 | 审计规则（Detect） |
+| POST | `/api/v1/server/UniProxy/illegal` | 节点 → 面板 | 违规命中上报（Illegal） |
 
-公共 Query（节点自动带）：
+### 2.1 鉴权（节点 → 面板）
 
-```text
-node_id=<ApiConfig.NodeID>
-token=<ApiConfig.ApiKey>
-node_type=<ApiConfig.NodeType>   # 如 vless、anytls
-```
+| 参数 | 位置 | 说明 |
+|---|---|---|
+| `node_id` | Query（或 `X-Node-Id`） | 节点 ID |
+| API Key | **`Authorization: Bearer <key>`** 与/或 **`X-Api-Key`** | `ApiConfig.ApiKey`，每节点 bound token |
+| `token` | Query | **仅兼容旧节点**；本版本**不再**把密钥放进 URL |
+| `node_type` | Query | 如 `vless`、`anytls` |
+
+生产环境请使用 Header，避免反向代理 access log / APM 泄露 token。
 
 `config` 另带：`local_port=1`（兼容字段）。
+
+### 2.2 审计规则 — `GET .../rule`
+
+推荐响应：
+
+```json
+{
+  "version": 1730000000,
+  "rules": [
+    {
+      "id": 1,
+      "pattern": "(?i)tracker\\.|announce",
+      "name": "bt",
+      "action": "reject",
+      "severity": 0,
+      "privacy": false
+    }
+  ]
+}
+```
+
+**面板总开关 `detect_enable`（默认关）：**
+
+- 关闭时：`rules` 恒为空；`POST /illegal` 返回 200 但 **accepted=0、不入库**。
+- 开启：管理端「流量审计」页开关，或 settings `detect_enable=true`。
+- 节点本地 `RuleListPath` **不受** 总开关影响。
+
+**节点行为：**
+
+1. 用安全编译（长度限制 + 超时）编译 `pattern`，防 ReDoS。
+2. 与本地 `ApiConfig.RuleListPath` **合并**（本地规则 `id=-1`）。
+3. `version` 未变可跳过重编译；请求失败时沿用上次成功缓存（避免闪断清空规则）。
+4. `"rules":[]` 合法：仅本地规则生效；两边都空则不拦截。
+5. `ControllerConfig.DisableGetRule: true` 时不拉面板规则。
+
+完整契约：K2Board 仓库 [`docs/UNIPROXY_DETECT_ILLEGAL.md`](../../k2board_anytls/docs/UNIPROXY_DETECT_ILLEGAL.md)（或面板文档同名文件）。
+
+### 2.3 违规上报 — `POST .../illegal`
+
+Body v1（节点默认发送，count 已在本地聚合）：
+
+```json
+[
+  {"uid": 12, "rule_id": 3, "count": 2},
+  {"uid": 88, "rule_id": 1, "count": 1}
+]
+```
+
+成功响应示例：
+
+```json
+{
+  "status": "ok",
+  "accepted": 2,
+  "dropped": 0,
+  "schema": 1,
+  "kick_uids": [],
+  "disable_uids": []
+}
+```
+
+| 字段 | 含义 |
+|---|---|
+| `accepted` / `dropped` | 面板写入 / 丢弃条数 |
+| `kick_uids` | 可选：断开这些 uid 的**已有连接**（默认 `[]`） |
+| `disable_uids` | 可选：面板已禁用的 uid，节点同步剔除（默认 `[]`） |
+
+**节点实现要点：**
+
+- **热路径只拦截 + 本地计数**（`mydispatcher` → `RuleManager.Detect`）；HTTP 仅在周期任务（与 traffic push 同频）。
+- 上报失败打错误日志；**仅 HTTP 成功**才打 `Report N illegal behaviors … to panel`。
+- 收到 `kick_uids` / `disable_uids`：从本地用户表剔除并 `UpdateUsers` / `RemoveUser`（AnyTLS 踢 mux）。
+- 失败可丢弃；**禁止阻塞代理转发**。单次 body 条数上限 1000。
+- **不影响**用户订阅 token / 门户 session。
+
+### 2.4 部署顺序（审计功能）
+
+1. **先升级面板**（表 `detect_*` + `/rule` `/illegal` + 管理端「流量审计」）。
+2. 管理端添加规则（可选）→ **打开总开关**（默认关，不开则不审查）。
+3. **再升级节点二进制**并重启（Header 鉴权 + ReportIllegal）。
+4. 确认日志：`Report N illegal behaviors … to panel`；**不要**默认开 `detect_auto_ban`。
+
+旧节点忽略 `/rule`、不上报 `/illegal` 仍可正常代理；新节点 + 总开关开启后审计才完整。
 
 ---
 
@@ -330,6 +418,7 @@ Body：`{ "<uid>": ["1.2.3.4", "5.6.7.8"], ... }`
 - 可选 VLESS Encryption：`decryption` + 订阅 `encryption`  
 - AnyTLS：`node_type=anytls`、`tls=1`  
 - 用户 / push / status / alive 格式与下文一致  
+- 审计：`GET /rule`、`POST /illegal`；鉴权 Header（Bearer / X-Api-Key）  
 
 节点侧补齐项（运维）：证书路径、`RealityMinClientVer`、CDN 本地 `Transport/XHTTP` 覆盖等。
 
@@ -346,9 +435,9 @@ Body：`{ "<uid>": ["1.2.3.4", "5.6.7.8"], ... }`
                             │ UniProxy HTTP API
 ┌───────────────────────────▼─────────────────────────────┐
 │  XrayR4u 节点                                            │
-│  · 拉 config/user，推 traffic/status/alive                 │
+│  · 拉 config/user/rule，推 traffic/status/alive/illegal    │
 │  · ControllerConfig 可覆盖传输/TLS/XHTTP/PQ                 │
-│  · 证书文件、限速、Fallback、监听 IP 等运维项                 │
+│  · 证书、限速、本地 rulelist、Fallback、监听 IP 等           │
 │  · 驱动 xray-core 26.7.11                                  │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -359,6 +448,7 @@ Body：`{ "<uid>": ["1.2.3.4", "5.6.7.8"], ... }`
 | 订阅链接 | ListenIP / 限速 / 设备限制 |
 | REALITY 密钥材料（建议） | XHTTP/TLS 本地强制覆盖（CDN 救急） |
 | 线路类型选择 | 日志、Fallback、PROXY protocol |
+| 审计规则库 / 事件记账 / 策略 kick·ban | 本地拦截 + 周期上报；可选 `RuleListPath` |
 
 ---
 
@@ -371,6 +461,9 @@ Body：`{ "<uid>": ["1.2.3.4", "5.6.7.8"], ... }`
 | 开 Encryption 启动失败 | 关闭 Fallback；检查 decryption 串（`xray vlessenc`） |
 | ML-DSA 后仅新客户端能连 | 订阅必须带 `mldsa65Verify`，或关闭 seed |
 | 想确认 REALITY 是否 PQ KEX | 节点 `RealityShow: true` 看日志 |
+| 审计不上报 / 无规则 | 确认面板已部署 `/rule` `/illegal`；节点日志 `ReportIllegal failed`；`DisableGetRule` 是否误开 |
+| 日志无 `Report N illegal…` | 无命中时正常；有命中应见 to panel，失败见 failed |
+| 节点 401/403 | 检查 Header 鉴权与节点 ApiKey；勿再依赖 query `token` |
 
 ---
 
@@ -386,4 +479,4 @@ Body：`{ "<uid>": ["1.2.3.4", "5.6.7.8"], ... }`
 
 ---
 
-*XrayR4u v0.9.15 · xray-core v26.7.11 · REALITY/Vision/PQ + TLS/XHTTP/CDN + AnyTLS · XrayR tools*
+*XrayR4u v0.9.15 · xray-core v26.7.11 · REALITY/Vision/PQ + TLS/XHTTP/CDN + AnyTLS · UniProxy rule/illegal · Header 鉴权 · XrayR tools*

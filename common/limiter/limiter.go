@@ -231,11 +231,15 @@ func (l *Limiter) RemoveOnlineIP(tag string, email string, ip string) {
 
 // GetUserBucket is called on the hot path (every new connection).
 // It enforces device limits and returns the rate-limit bucket for the user.
+//
+// Fail-closed: if the inbound tag is not registered, reject the connection.
+// A missing limiter entry means the controller has not (yet) authorized this
+// tag; silently allowing unlimited traffic would skip device/speed limits.
 func (l *Limiter) GetUserBucket(tag string, email string, ip string) (bucket *ratelimit.Bucket, speedLimit bool, reject bool) {
 	v, ok := l.inboundInfo.Load(tag)
 	if !ok {
-		errors.LogDebug(context.Background(), "GetUserBucket: inbound not found: ", tag)
-		return nil, false, false
+		errors.LogDebug(context.Background(), "GetUserBucket: inbound not found (reject): ", tag)
+		return nil, false, true
 	}
 	info := v.(*InboundInfo)
 

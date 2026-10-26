@@ -126,19 +126,21 @@ go version
 #### 2.3.2 克隆并编译
 
 ```bash
-# 克隆仓库
+# 克隆仓库（或使用本地源码目录）
 git clone https://github.com/HenZenKuriRIP/XrayR4u.git
 cd XrayR4u
 
 # 下载依赖
 go mod download
 
-# 编译
+# 本机架构编译
 CGO_ENABLED=0 go build -v -o XrayR -trimpath -ldflags "-s -w -buildid=" ./main
 
-# 验证编译产物
-./XrayR --version
-# 输出: XrayR 0.8.0 (A Xray backend that supports many panels)
+# 交叉编译 Linux amd64（在 macOS/本机为 VPS 打包时）
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -buildid=" -o XrayR-linux-amd64 ./main
+
+# 验证（本机产物）
+./XrayR --help
 ```
 
 #### 2.3.3 安装二进制文件
@@ -303,8 +305,10 @@ ApiConfig:
 ```
 
 **注意:**
-- V2Board 的 API Key 使用 `token` 参数传递
+- **鉴权（本版本）**：节点将 `ApiKey` 以 **`Authorization: Bearer`** 与 **`X-Api-Key`** Header 发送；`node_id` 仍在 Query。**不要**再依赖 URL Query `token=`（易进 access log）。
+- 面板需支持 Header 鉴权（K2Board UniProxy 已支持）。
 - **REALITY 模式下无需配置 TLS 证书，面板端需配置 serverNames/privateKey/shortIds 等参数**
+- 审计规则 / 违规上报：`GET /UniProxy/rule`、`POST /UniProxy/illegal`；详见 [deploy/K2BOARD_INTEGRATION.md](deploy/K2BOARD_INTEGRATION.md) §2.2–2.4
 
 ---
 
@@ -484,6 +488,14 @@ CertConfig:
 > **注意**: xray-core v1.26x 起已彻底移除 `http`/`quic` 传输协议、`xtls` 安全类型。
 > 新增 `splithttp`（XHTTP）传输协议、`reality` 安全类型。
 
+一键将 **Cloudflare WARP**（wgcf + WireGuard 出站）写入上述 route/outbound，用于解锁 AI / 流媒体（不改主安装、不改系统路由）：
+
+```bash
+bash deploy/install-warp.sh --install
+```
+
+详见 [deploy/WARP_README.md](deploy/WARP_README.md)。
+
 ### 7.4 自定义入站 (custom_inbound.json)
 
 ```json
@@ -500,16 +512,42 @@ CertConfig:
 ]
 ```
 
-### 7.5 本地审计规则 (rulelist)
+### 7.5 审计规则（面板 + 本地 rulelist）
+
+#### 工作方式
+
+| 来源 | 说明 |
+|------|------|
+| 面板 `GET /api/v1/server/UniProxy/rule` | 管理端配置的 Detect 规则（推荐） |
+| 本地 `ApiConfig.RuleListPath` | 每行一条正则，`id=-1`，与面板规则**合并** |
+| 命中后 | 节点**立即拒绝**该连接；周期任务 `POST /illegal` 向面板记账 |
+
+- 本地拦截始终在节点完成；面板只做记账与可选策略（kick/ban 默认关）。
+- **不影响**正常用户订阅 / session。
+- `ControllerConfig.DisableGetRule: true` 时不拉面板规则（一般保持 `false`）。
+- 升级顺序：**先面板、后节点二进制**。
+
+#### 本地 rulelist 示例
+
+路径示例：`/etc/XrayR/rulelist`，并在 config 中设置 `RuleListPath`：
 
 ```
 # 每行一个正则表达式
-# 匹配的域名/地址将被拒绝连接
+# 匹配的目标地址字符串将被拒绝连接
 .*\.example\.com
 .*torrent.*
-.*porn.*
 .*\.gov\.cn
 ```
+
+#### 相关日志
+
+| 日志 | 含义 |
+|------|------|
+| `Report N illegal behaviors (… hits) to panel` | 上报成功 |
+| `ReportIllegal failed …` | 上报失败（本地仍已拦截；检查面板 `/illegal` 与鉴权） |
+| `policy kick/disable N user(s) after illegal report` | 面板返回了 kick/disable uid（策略开启时） |
+
+对接字段与 curl 示例见 [deploy/K2BOARD_INTEGRATION.md](deploy/K2BOARD_INTEGRATION.md)。
 
 ---
 
@@ -630,19 +668,31 @@ docker run -d \
   xrayr:latest
 ```
 
-### 源码升级
+### 源码升级 / 仅更新节点二进制
+
+面板已升级、只需换节点时：
 
 ```bash
-# 拉取最新代码
-cd XrayR4u && git pull
+# 本机交叉编译（示例：linux amd64）
+cd /path/to/XrayR4u
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -buildid=" -o XrayR-linux-amd64 ./main
 
-# 重新编译
-CGO_ENABLED=0 go build -v -o XrayR -trimpath -ldflags "-s -w -buildid=" ./main
-
-# 替换二进制文件
+# 上传到节点后
 sudo systemctl stop xrayr
-sudo cp XrayR /usr/local/bin/
+sudo cp XrayR-linux-amd64 /usr/local/bin/XrayR   # 路径以实际安装为准
+sudo chmod +x /usr/local/bin/XrayR
 sudo systemctl start xrayr
+sudo journalctl -u xrayr -f
+```
+
+一般**不必**改 `config.yml` 的 ApiKey / 用户订阅。审计功能需面板先支持 `/rule` 与 `/illegal`。
+
+在节点上直接编译时：
+
+```bash
+cd XrayR4u && git pull   # 若用 git
+CGO_ENABLED=0 go build -v -o XrayR -trimpath -ldflags "-s -w -buildid=" ./main
+sudo systemctl stop xrayr && sudo cp XrayR /usr/local/bin/ && sudo systemctl start xrayr
 ```
 
 ---
@@ -651,11 +701,12 @@ sudo systemctl start xrayr
 
 安装完成后，按以下步骤验证：
 
-- [ ] `XrayR --version` 能否正常输出版本
+- [ ] `XrayR --help` / 进程能正常启动
 - [ ] `systemctl status xrayr` 显示 `active (running)`
 - [ ] `journalctl -u xrayr -n 20` 无报错，显示 "Xray Core Version"
-- [ ] 日志中显示 `[Vless: NodeID] Start monitor node status`
+- [ ] 日志中显示 `[Vless: NodeID] Start monitor node status`（或 anytls）
 - [ ] 面板后台节点显示在线
+- [ ] （审计）面板已部署时：有命中可见 `Report … illegal behaviors … to panel`；401 则查 Header 鉴权
 - [ ] 用户能正常连接并使用代理
 - [ ] 面板后台能看到用户流量统计数据
 - [ ] 如启用 TLS，浏览器访问 `https://节点域名` 证书正常

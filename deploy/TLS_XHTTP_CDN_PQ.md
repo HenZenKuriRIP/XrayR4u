@@ -47,7 +47,7 @@ Nodes:
   - PanelType: "V2board"
     ApiConfig:
       ApiHost: "https://your-panel.com"
-      ApiKey: "token"
+      ApiKey: "token"   # Header: Bearer + X-Api-Key（非 query token=）
       NodeID: 1
       NodeType: Vless
       # 面板 network/tls 可忽略；由下方 ControllerConfig 覆盖

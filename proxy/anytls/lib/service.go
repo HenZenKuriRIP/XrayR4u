@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net"
 	"os"
+	"sync"
 
 	"github.com/HenZenKuriRIP/XrayR4u/proxy/anytls/lib/padding"
 	"github.com/HenZenKuriRIP/XrayR4u/proxy/anytls/lib/session"
@@ -26,6 +27,12 @@ type Service struct {
 	handler         N.TCPConnectionHandlerEx
 	fallbackHandler N.TCPConnectionHandlerEx
 	logger          logger.ContextLogger
+
+	// sessions tracks live authenticated mux sessions so UpdateUsers can
+	// immediately tear down connections whose password is no longer valid.
+	// Without this, deleted users keep proxying until the TCP socket drops.
+	sessionsMu sync.Mutex
+	sessions   map[*session.Session][32]byte // session → password hash
 }
 
 type ServiceConfig struct {
@@ -71,6 +78,37 @@ func (s *Service) UpdateUsers(users []User) {
 		u[sha256.Sum256([]byte(user.Password))] = user.Name
 	}
 	s.users.Store(u)
+	s.kickRevokedSessions(u)
+}
+
+// kickRevokedSessions closes mux sessions whose password hash is no longer
+// in the authorized set. Called from UpdateUsers after the user table swap.
+func (s *Service) kickRevokedSessions(authorized map[[32]byte]string) {
+	var toClose []*session.Session
+	s.sessionsMu.Lock()
+	for sess, hash := range s.sessions {
+		if _, ok := authorized[hash]; !ok {
+			toClose = append(toClose, sess)
+		}
+	}
+	s.sessionsMu.Unlock()
+	for _, sess := range toClose {
+		_ = sess.Close()
+	}
+}
+
+func (s *Service) trackSession(hash [32]byte, sess *session.Session) {
+	s.sessionsMu.Lock()
+	if s.sessions == nil {
+		s.sessions = make(map[*session.Session][32]byte)
+	}
+	s.sessions[sess] = hash
+	s.sessionsMu.Unlock()
+	sess.SetCloseHook(func() {
+		s.sessionsMu.Lock()
+		delete(s.sessions, sess)
+		s.sessionsMu.Unlock()
+	})
 }
 
 // NewConnection `conn` should be plaintext
@@ -111,7 +149,7 @@ func (s *Service) NewConnection(ctx context.Context, conn net.Conn, source M.Soc
 		}
 	}
 
-	session := session.NewServerSession(conn, func(stream *session.Stream) {
+	sess := session.NewServerSession(conn, func(stream *session.Stream) {
 		destination, err := M.SocksaddrSerializer.ReadAddrPort(stream)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "ReadAddrPort:", err)
@@ -120,8 +158,11 @@ func (s *Service) NewConnection(ctx context.Context, conn net.Conn, source M.Soc
 
 		s.handler.NewConnectionEx(ctx, stream, source, destination, onClose)
 	}, &s.padding, s.logger)
-	session.Run()
-	session.Close()
+	// Register before Run so a concurrent UpdateUsers that drops this user
+	// can still find and close the session once it is live.
+	s.trackSession(passwordSha256, sess)
+	sess.Run()
+	sess.Close()
 	return nil
 }
 

@@ -45,6 +45,13 @@ func TestDeviceLimitRefcount(t *testing.T) {
 	}
 }
 
+func TestGetUserBucket_MissingInboundRejects(t *testing.T) {
+	l := New()
+	if _, _, reject := l.GetUserBucket("missing_tag", "x|a@b|1", "1.1.1.1"); !reject {
+		t.Fatal("missing inbound tag must reject (fail-closed); must not skip device/speed limits")
+	}
+}
+
 func TestGetOnlineDeviceDoesNotClearLiveState(t *testing.T) {
 	l := New()
 	users := []api.UserInfo{{
