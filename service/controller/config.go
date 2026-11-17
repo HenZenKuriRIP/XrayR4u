@@ -34,10 +34,10 @@ type Config struct {
 	// When empty, panel tls_settings.min_client_ver is used if present; otherwise
 	// the built-in default "1.8.0" is used.
 	//
-	// IMPORTANT (xray-core ≥ 26.7.11): if the final REALITY config leaves
-	// minClientVer unset, the core defaults to "26.3.27" and many third-party
-	// clients (e.g. Mihomo reporting 1.8.x) will fail authentication. Always
-	// keep an explicit value unless you intentionally want the core default.
+	// v26.11.9 no longer injects a core default of 26.3.27. This node still
+	// writes 1.8.0 when both sides are empty, so Mihomo-style 1.8.x clients
+	// pass the version check. That value does not waive the X25519MLKEM768
+	// ClientHello requirement added in v26.9.8.
 	RealityMinClientVer string `mapstructure:"RealityMinClientVer"`
 	// RealityMldsa65Seed is the REALITY server-side ML-DSA-65 seed
 	// (base64.RawURLEncoding, 32 bytes decoded). Non-empty value always
@@ -78,6 +78,42 @@ type Config struct {
 	// Host/Path/Mode override panel. Required for a complete CDN path when
 	// the panel does not supply host/path.
 	XHTTP *XHTTPConfig `mapstructure:"XHTTP"`
+
+	// Hysteria2 holds optional local knobs for a Hysteria2 node.
+	// Ignored by VLESS and AnyTLS. Nil means masquerade 404, no salamander
+	// obfuscation, and BBR congestion (no Brutal bandwidth).
+	Hysteria2 *Hysteria2Config `mapstructure:"Hysteria2"`
+}
+
+// Hysteria2Config is node-local Hysteria2 transport configuration.
+// The panel UniProxy payload does not carry these fields. Password auth is
+// the user UUID from /user, not a value in this struct.
+type Hysteria2Config struct {
+	// MasqType is the HTTP/3 masquerade for unauthenticated QUIC: 404 (default),
+	// file, proxy, or string.
+	MasqType string `mapstructure:"MasqType"`
+	// MasqDir is the directory served when MasqType is file.
+	MasqDir string `mapstructure:"MasqDir"`
+	// MasqURL is the reverse-proxy target when MasqType is proxy.
+	MasqURL string `mapstructure:"MasqURL"`
+	// MasqRewriteHost rewrites the Host header to MasqURL when proxying.
+	MasqRewriteHost bool `mapstructure:"MasqRewriteHost"`
+	// MasqInsecure skips TLS verification for a proxy masquerade target.
+	MasqInsecure bool `mapstructure:"MasqInsecure"`
+	// MasqContent is the body when MasqType is string.
+	MasqContent string `mapstructure:"MasqContent"`
+	// MasqStatusCode is the status when MasqType is string. 0 means 200.
+	MasqStatusCode int32 `mapstructure:"MasqStatusCode"`
+	// UdpIdleTimeout is the UDP session idle timeout in seconds (2–600). 0 means 60.
+	UdpIdleTimeout int64 `mapstructure:"UdpIdleTimeout"`
+	// ObfsPassword enables Salamander UDP obfuscation. Empty disables it.
+	// Clients must use the same obfs password. Leave empty for plain Hysteria2.
+	ObfsPassword string `mapstructure:"ObfsPassword"`
+	// Congestion is reno, bbr, brutal, or force-brutal. Empty uses the core default (BBR when bandwidth is unset).
+	Congestion string `mapstructure:"Congestion"`
+	// Up and Down are Brutal bandwidth strings such as "100 mbps". Both are required for brutal.
+	Up   string `mapstructure:"Up"`
+	Down string `mapstructure:"Down"`
 }
 
 // XHTTPConfig is the node-local XHTTP / SplitHTTP inbound profile.

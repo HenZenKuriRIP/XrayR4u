@@ -89,3 +89,6 @@ Nodes:
       #   DNSEnv: # DNS ENV option used by DNS provider
       #     ALICLOUD_ACCESS_KEY: aaa
       #     ALICLOUD_SECRET_KEY: bbb
+      #
+      # Hysteria2 is a separate Nodes[] entry (UDP, TLS, ALPN h3).
+      # Do not change this VLESS block to add it. See deploy/HYSTERIA2.md.

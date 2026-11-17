@@ -1,8 +1,8 @@
 # XrayR4u
 
-[![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.27+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-MPL%202.0-blue.svg)](LICENSE)
-[![Xray-core](https://img.shields.io/badge/Xray--core-v26.7.11-red.svg)](https://github.com/XTLS/Xray-core)
+[![Xray-core](https://img.shields.io/badge/Xray--core-v26.11.9-red.svg)](https://github.com/XTLS/Xray-core)
 [![Release](https://img.shields.io/badge/release-v0.9.16-brightgreen.svg)](https://github.com/HenZenKuriRIP/XrayR4u/releases)
 
 XrayR4u 是 [XrayR](https://github.com/XrayR-project/XrayR) 的社区维护分支：Go 语言后端代理管理框架，作为 **K2Board 面板** 与 **Xray-core** 之间的桥梁。
@@ -28,10 +28,11 @@ XrayR4u 是 [XrayR](https://github.com/XrayR-project/XrayR) 的社区维护分�
 | 內建多路复用 / padding | — | — | ✅ |
 | 抗主动探测 Fallback | — | — | ✅ |
 
-- 內嵌 **Xray-core v26.7.11**，无需单独安装核心
+- 內嵌 **Xray-core v26.11.9**，无需单独安装核心
 - 单实例多面板 / 多节点
 - 配置热重载
 - 对接 **K2Board UniProxy**（详见 [deploy/K2BOARD_INTEGRATION.md](deploy/K2BOARD_INTEGRATION.md)）
+- Hysteria2 以独立节点接入，不改 VLESS / AnyTLS 行为（详见 [deploy/HYSTERIA2.md](deploy/HYSTERIA2.md)）
 
 ## 支持的前端面板
 
@@ -44,8 +45,8 @@ XrayR4u 是 [XrayR](https://github.com/XrayR-project/XrayR) 的社区维护分�
 | 项目 | 版本 |
 |------|------|
 | XrayR4u | **v0.9.16** |
-| Xray-core | **v26.7.11** |
-| Go | 1.26+ |
+| Xray-core | **v26.11.9** |
+| Go | 1.27+ |
 
 ## 密钥 / 后量子材料生成（节点自带）
 
@@ -69,7 +70,7 @@ XrayR tools help
 bash <(curl -sSL https://raw.githubusercontent.com/HenZenKuriRIP/XrayR4u/main/deploy/install.sh)
 ```
 
-交互输入面板地址、Token、节点 ID，选择协议后自动安装。
+交互输入面板地址、Token、节点 ID，选择协议后自动安装。`[1]` VLESS、`[2]` AnyTLS、`[3]` 双协议与原来相同。`[4]` Hysteria2 只用于新机器，并且要自带已编译的 `./XrayR`；已发布的 v0.9.16 还不能装这个协议。正在运行的节点不要重跑脚本，追加方式见 [deploy/HYSTERIA2.md](deploy/HYSTERIA2.md)。
 
 ### 可选：WARP 解锁 AI / 流媒体
 

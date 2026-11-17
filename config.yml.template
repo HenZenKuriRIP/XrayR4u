@@ -276,3 +276,32 @@ Nodes:
   #       DNSEnv:
   #         ALICLOUD_ACCESS_KEY: "your-key"
   #         ALICLOUD_SECRET_KEY: "your-secret"
+
+  # ========================= 示例 5: Hysteria2 + TLS =========================
+  # 追加一条新节点，不要改已经在跑的 VLESS / AnyTLS 条目。
+  # 监听 UDP。证书域名必须能被客户端校验。密码是面板用户 UUID。
+  # 详细说明见 deploy/HYSTERIA2.md。面板订阅链接不在这次改动里。
+  # - PanelType: "V2board"
+  #   ApiConfig:
+  #     ApiHost: "https://your-panel.com"
+  #     ApiKey: "your-api-token"
+  #     NodeID: 5
+  #     NodeType: hysteria2
+  #     EnableReality: false
+  #     Timeout: 30
+  #   ControllerConfig:
+  #     ListenIP: 0.0.0.0
+  #     UpdatePeriodic: 60
+  #     CertConfig:
+  #       CertMode: file
+  #       CertDomain: "hy2.example.com"
+  #       CertFile: /etc/XrayR/cert/hy2.example.com.crt
+  #       KeyFile: /etc/XrayR/cert/hy2.example.com.key
+  #       ALPN: ["h3"]
+  #     # 整段都可以不写：默认伪装 404、无 Salamander、无 Brutal
+  #     # Hysteria2:
+  #     #   MasqType: "404"
+  #     #   ObfsPassword: ""
+  #     #   Congestion: ""
+  #     #   Up: ""
+  #     #   Down: ""

@@ -6,7 +6,7 @@ XrayR 是一个基于 Go 语言开发的后端代理管理框架，它作为**�
 
 - **版本**: v0.9.16
 - **Go 版本**: 1.26
-- **核心依赖**: Xray-core v26.7.11 (`v1.260327.1-0.20260711155151-50231eaff98c`)
+- **核心依赖**: Xray-core v26.11.9 (`v1.260327.1-0.20261109052709-676eaf66f8f0`)
 - **许可证**: Mozilla Public License Version 2.0
 - **面板**: K2Board UniProxy
 
@@ -599,6 +599,10 @@ RuleManager
 **加密方式**:
 - VLESS: none (无内层加密，依赖外层 TLS/REALITY)
 - AnyTLS: SHA256(密码) 认证 + TLS 加密 + 可自定义 padding 混淆
+
+### 7.1 Hysteria2
+
+`NodeType` 为 `hysteria2`、`hysteria` 或 `hy2` 时走独立入站：UDP、TLS、ALPN `h3`，用户 UUID 作为认证密码。它在共用的 `buildStreamSetting` 之前返回，不改 VLESS / AnyTLS 的传输、ALPN 和 REALITY。UniProxy 接口不变。上线方式、配置和回滚见 [deploy/HYSTERIA2.md](deploy/HYSTERIA2.md)。
 
 ---
 

@@ -19,7 +19,6 @@ import (
 	xnet "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/singbridge"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/proxy"
@@ -84,7 +83,7 @@ func NewServer(ctx context.Context, config *Config) (*Server, error) {
 		PaddingScheme:   scheme,
 		Users:           nil, // users are added later via UpdateUsers() from the controller
 		Handler:         &tcpHandlerEx{server: s},
-		Logger:          singbridge.NewLogger(errors.New),
+		Logger:          newCoreLogger(),
 		FallbackHandler: fallbackHandler,
 	}
 
@@ -144,7 +143,7 @@ type tcpHandlerEx struct {
 func (h *tcpHandlerEx) NewConnectionEx(ctx context.Context, conn net.Conn, source M.Socksaddr, destination M.Socksaddr, onClose N.CloseHandlerFunc) {
 	// Convert M.Socksaddr → xray-core net.Destination using xray-core's
 	// own helper (handles FQDN, IP, and invalid addresses).
-	dest, err := singbridge.ToDestination(destination, xnet.Network_TCP)
+	dest, err := socksaddrToDestination(destination, xnet.Network_TCP)
 	if err != nil {
 		errors.LogInfo(ctx, "anytls: invalid destination: ", err)
 		if onClose != nil {

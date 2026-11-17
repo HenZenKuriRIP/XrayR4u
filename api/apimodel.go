@@ -3,7 +3,19 @@ package api
 import (
 	"encoding/json"
 	"regexp"
+	"strings"
 )
+
+// IsHysteriaNode reports whether nodeType selects the Hysteria2 inbound.
+// Accepted values are hysteria2, hysteria, and hy2. VLESS and AnyTLS are not included.
+func IsHysteriaNode(nodeType string) bool {
+	switch strings.ToLower(strings.TrimSpace(nodeType)) {
+	case "hysteria2", "hysteria", "hy2":
+		return true
+	default:
+		return false
+	}
+}
 
 // API config
 type Config struct {

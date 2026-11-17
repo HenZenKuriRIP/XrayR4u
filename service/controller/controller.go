@@ -366,7 +366,6 @@ func (c *Controller) addNewTag(newNodeInfo *api.NodeInfo) error {
 	return c.addOutbound(outBoundConfig)
 }
 
-
 func (c *Controller) addNewUser(userInfo *[]api.UserInfo, nodeInfo *api.NodeInfo) error {
 	tag := c.getState().tag
 
@@ -380,6 +379,21 @@ func (c *Controller) addNewUser(userInfo *[]api.UserInfo, nodeInfo *api.NodeInfo
 		server.UpdateUsers(c.buildAnyTLSUser(userInfo))
 		s := c.getState()
 		log.Printf("[%s: %d] Updated %d anytls users", s.nodeInfo.NodeType, s.nodeInfo.NodeID, len(*userInfo))
+		return nil
+	}
+
+	// Hysteria2 implements proxy.UserManager, so it shares the VLESS
+	// incremental add/remove path. Only the account payload differs.
+	if api.IsHysteriaNode(nodeInfo.NodeType) {
+		users, err := c.buildHysteriaUser(userInfo)
+		if err != nil {
+			return err
+		}
+		if err := c.addUsers(users, tag); err != nil {
+			return err
+		}
+		s := c.getState()
+		log.Printf("[%s: %d] Added %d hysteria2 users", s.nodeInfo.NodeType, s.nodeInfo.NodeID, len(users))
 		return nil
 	}
 

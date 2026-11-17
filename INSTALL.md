@@ -6,14 +6,14 @@
 |------|------|
 | 操作系统 | Linux (推荐 Debian 10+/Ubuntu 18.04+/CentOS 7+) |
 | 架构 | amd64 / arm64 |
-| Go 版本 | 1.26+ (仅源码编译需要) |
+| Go 版本 | 1.27+ (仅源码编译需要) |
 | 内存 | 最低 256MB，推荐 512MB+ |
 | 磁盘 | 最低 100MB |
 | 网络 | 能访问面板 API 地址，公网节点需开放对应端口 |
 
 ### 依赖项
 
-- **Xray-core**: 已内嵌 **v26.7.11**，无需单独安装。支持 VLESS + REALITY + Vision、TLS + XHTTP（CDN）、VLESS Encryption / REALITY 后量子、AnyTLS
+- **Xray-core**: 已内嵌 **v26.11.9**，无需单独安装。支持 VLESS + REALITY + Vision、TLS + XHTTP（CDN）、VLESS Encryption / REALITY 后量子、AnyTLS、Hysteria2（UDP + TLS，见 [deploy/HYSTERIA2.md](deploy/HYSTERIA2.md)）
 - **证书**: REALITY 模式无需证书。TLS / CDN 源站需配置 CertConfig；Let's Encrypt 需域名解析到服务器
 - **面板对接**: 见 [deploy/K2BOARD_INTEGRATION.md](deploy/K2BOARD_INTEGRATION.md)
 
@@ -32,6 +32,15 @@ bash <(curl -sSL https://raw.githubusercontent.com/HenZenKuriRIP/XrayR4u/main/de
 - 下载并安装 XrayR
 - 创建 systemd 服务
 - 引导配置 config.yml
+
+协议菜单：
+
+1. VLESS + REALITY
+2. AnyTLS + TLS
+3. VLESS + AnyTLS
+4. Hysteria2 + TLS
+
+`[1]` 到 `[3]` 继续使用 Release **v0.9.16**。`[4]` 要求脚本同目录已有包含 Hysteria2 的 `./XrayR`，脚本不会下载 v0.9.16 来装这个协议。已经在跑 VLESS 或 AnyTLS 时不要选 `[4]`：脚本会覆盖整份 `/etc/XrayR/config.yml`，发现旧节点后会退出。给现有服务器加 Hysteria2 时，替换二进制后按 [deploy/HYSTERIA2.md](deploy/HYSTERIA2.md) 追加一条节点。
 
 ---
 
@@ -398,9 +407,7 @@ ApiConfig:
 | `mldsa65Seed` | `RealityMldsa65Seed` → 面板 → 关闭 |
 | `decryption` | `VlessDecryption` → 面板 → `"none"` |
 
-> xray-core ≥ 26.7.11：若最终配置未设置 `minClientVer`，核心会默认 `26.3.27`，
-> Mihomo 等第三方客户端常上报 `1.8.x` 会被 REALITY 拒绝。**请保持显式配置**，
-> 兼容场景推荐 `1.8.0`，仅允许较新官方客户端时可设 `26.3.27`。
+> 本仓库仍在面板和 config.yml 都没写 `minClientVer` 时写入 `1.8.0`。v26.11.9 不再自己填 `26.3.27`。这个值不管 X25519MLKEM768：v26.9.8 起，没有该密钥交换的 ClientHello 会被 REALITY 拒绝。兼容旧客户端时保持 `1.8.0`；只允许较新官方客户端时可设 `26.3.27`。
 
 **后量子与 CDN（详见 [deploy/K2BOARD_INTEGRATION.md](deploy/K2BOARD_INTEGRATION.md) / [deploy/TLS_XHTTP_CDN_PQ.md](deploy/TLS_XHTTP_CDN_PQ.md)）：**
 
@@ -557,17 +564,20 @@ bash deploy/install-warp.sh --install
 # 如果使用 UFW
 sudo ufw allow 443/tcp      # HTTPS / VLESS+TLS
 sudo ufw allow 80/tcp       # HTTP (证书验证)
+sudo ufw allow 443/udp      # Hysteria2。端口以面板 server_port 为准，协议是 UDP
 sudo ufw allow 10000:10100  # 用户端口范围 (根据实际配置调整)
 
 # 如果使用 firewalld
 sudo firewall-cmd --permanent --add-port=443/tcp
 sudo firewall-cmd --permanent --add-port=80/tcp
+sudo firewall-cmd --permanent --add-port=443/udp
 sudo firewall-cmd --permanent --add-port=10000-10100/tcp
 sudo firewall-cmd --reload
 
 # 如果使用 iptables
 sudo iptables -A INPUT -p tcp --dport 443 -j ACCEPT
 sudo iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+sudo iptables -A INPUT -p udp --dport 443 -j ACCEPT   # Hysteria2，端口按面板实际值修改
 ```
 
 ---

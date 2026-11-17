@@ -45,6 +45,13 @@ func (c *Controller) buildAnyTLSUser(userInfo *[]api.UserInfo) []anytls.User {
 	return users
 }
 
+func (c *Controller) buildHysteriaUser(userInfo *[]api.UserInfo) ([]*protocol.User, error) {
+	if userInfo == nil {
+		return nil, nil
+	}
+	return buildHysteriaUsers(c.getState().tag, *userInfo)
+}
+
 func (c *Controller) buildUserTag(user *api.UserInfo) string {
 	return fmt.Sprintf("%s|%s|%d", c.getState().tag, user.Email, user.UID)
 }

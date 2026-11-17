@@ -22,7 +22,7 @@ func newFakeDNSSniffer(ctx context.Context) (protocolSnifferWithMetadata, error)
 		return protocolSnifferWithMetadata{}, err
 	}
 	if fakeDNSEngine == nil {
-		errNotInit := newError("FakeDNSEngine is not initialized, but such a sniffer is used").AtError()
+		errNotInit := newError("FakeDNSEngine is not initialized, but such a sniffer is used")
 		return protocolSnifferWithMetadata{}, errNotInit
 	}
 	return protocolSnifferWithMetadata{protocolSniffer: func(ctx context.Context, bytes []byte) (SniffResult, error) {

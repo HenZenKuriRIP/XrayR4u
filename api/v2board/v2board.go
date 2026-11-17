@@ -754,7 +754,7 @@ func (c *APIClient) ParseUniProxyNodeResponse(response *simplejson.Json) (*api.N
 		network = "tcp"
 	}
 
-	tlsMode := response.Get("tls").MustInt() // 0=none, 1=tls, 2=reality
+	tlsMode := response.Get("tls").MustInt()  // 0=none, 1=tls, 2=reality
 	flow := response.Get("flow").MustString() // "xtls-rprx-vision" or empty
 	vlessDecryption := resolvePanelVlessDecryption(response)
 
@@ -780,11 +780,11 @@ func (c *APIClient) ParseUniProxyNodeResponse(response *simplejson.Json) (*api.N
 	}
 
 	// Also check EnableReality from config as override.
-	// Skip AnyTLS nodes: their TLS/REALITY mode is determined solely by the
+	// Skip AnyTLS and Hysteria2: their TLS mode is determined solely by the
 	// panel response (tls field), not by the global EnableReality flag.
-	// Forcing REALITY on an AnyTLS node configured as plain TLS would break
-	// existing clients that expect standard TLS on that port.
-	if c.EnableReality && tlsMode != 2 && !strings.EqualFold(c.NodeType, "anytls") {
+	// Forcing REALITY on those nodes would break clients that expect standard TLS.
+	// VLESS behavior is unchanged.
+	if c.EnableReality && tlsMode != 2 && !strings.EqualFold(c.NodeType, "anytls") && !api.IsHysteriaNode(c.NodeType) {
 		TLSType = "reality"
 		enableVision = true
 		enableTLS = true
@@ -806,9 +806,8 @@ func (c *APIClient) ParseUniProxyNodeResponse(response *simplejson.Json) (*api.N
 }
 
 // defaultRealityMinClientVer is applied when neither the panel nor config.yml
-// supplies a minClientVer. Kept deliberately low for third-party client
-// compatibility (Mihomo etc. often report 1.8.x). Must stay non-empty so that
-// xray-core ≥ 26.7.11 does not fall through to its built-in default 26.3.27.
+// supplies a minClientVer. Kept at 1.8.0 so clients that report 1.8.x pass
+// the version check. v26.11.9 no longer fills 26.3.27 on its own.
 const defaultRealityMinClientVer = "1.8.0"
 
 // buildRealitySettings converts UniProxy tls_settings to REALITYConfig JSON.

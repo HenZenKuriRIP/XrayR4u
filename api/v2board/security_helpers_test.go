@@ -66,6 +66,32 @@ func TestNew_UsesHeaderAuthNotQueryToken(t *testing.T) {
 	require.Contains(t, auth, "test-api-key-xyz")
 }
 
+func TestParseUniProxy_EnableRealityStaysOnVlessOnly(t *testing.T) {
+	t.Parallel()
+	raw, err := json.Marshal(map[string]interface{}{
+		"server_port": 443,
+		"network":     "tcp",
+		"tls":         1,
+	})
+	require.NoError(t, err)
+	j, err := simplejson.NewJson(raw)
+	require.NoError(t, err)
+
+	for _, nt := range []string{"anytls", "hysteria2", "hysteria", "hy2"} {
+		c := &APIClient{NodeType: nt, NodeID: 1, EnableReality: true}
+		info, err := c.ParseUniProxyNodeResponse(j)
+		require.NoError(t, err, nt)
+		require.Equal(t, "tls", info.TLSType, nt)
+		require.True(t, info.EnableTLS, nt)
+	}
+
+	c := &APIClient{NodeType: "vless", NodeID: 1, EnableReality: true}
+	info, err := c.ParseUniProxyNodeResponse(j)
+	require.NoError(t, err)
+	require.Equal(t, "reality", info.TLSType)
+	require.True(t, info.EnableVision)
+}
+
 func TestParseUniProxyNodeResponse_InvalidPort(t *testing.T) {
 	t.Parallel()
 	c := &APIClient{NodeType: "vless", NodeID: 1}

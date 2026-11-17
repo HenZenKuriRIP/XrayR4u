@@ -7,8 +7,8 @@
 | 系统 | Debian 12/13, Ubuntu 20.04+/22.04+/24.04+ |
 | 架构 | amd64 / arm64 |
 | 面板 | K2Board (UniProxy) |
-| 协议 | VLESS + REALITY / TLS + XHTTP + CDN / AnyTLS + TLS |
-| 核心 | Xray-core **v26.7.11**（內嵌） |
+| 协议 | VLESS + REALITY / TLS + XHTTP + CDN / AnyTLS + TLS / Hysteria2 + TLS |
+| 核心 | Xray-core **v26.11.9**（源码內嵌）。已发布的 XrayR4u v0.9.16 二进制仍是 v26.7.11 |
 
 ## 一行命令
 
@@ -19,9 +19,13 @@ bash <(curl -sSL https://raw.githubusercontent.com/HenZenKuriRIP/XrayR4u/main/de
 1. 面板地址  
 2. API Token  
 3. 节点 ID  
-4. 协议：VLESS + REALITY / AnyTLS + TLS / 双协议  
+4. 协议：`[1]` VLESS + REALITY / `[2]` AnyTLS + TLS / `[3]` 双协议 / `[4]` Hysteria2 + TLS
 
-> 离线：本机编译或下载 Release 的 `XrayR-linux-amd64` 重命名为 `XrayR`，与 `install.sh` 同目录后执行。
+`[1]` 到 `[3]` 的配置和以前一样，可以继续使用 Release **v0.9.16**。
+
+`[4]` 只适合新机器。已发布的 v0.9.16 不含 Hysteria2，脚本不会为这个选项下载 Release；把包含该功能的 `./XrayR` 放在脚本同目录。已经在跑 VLESS 或 AnyTLS 的机器不要选 `[4]`，安装会整份覆盖 `config.yml`，脚本发现旧节点后会退出。追加方式见 [HYSTERIA2.md](HYSTERIA2.md)。
+
+> 离线：本机编译或下载 Release 的 `XrayR-linux-amd64` 重命名为 `XrayR`，与 `install.sh` 同目录后执行。Hysteria2 只能用本机编译的这份二进制，不能用 v0.9.16 的 Release。
 
 ### 本机交叉编译（linux amd64）
 
@@ -47,6 +51,7 @@ deploy/
 ├── WARP_README.md             # WARP (wgcf + WireGuard 出站) 说明
 ├── README.md                  # 本文件
 ├── K2BOARD_INTEGRATION.md     # K2Board 对接参考（含 rule/illegal）
+├── HYSTERIA2.md               # Hysteria2 节点：配置、安装脚本、上线与回滚
 └── TLS_XHTTP_CDN_PQ.md        # CDN / XHTTP / 后量子运维
 ```
 
@@ -58,6 +63,15 @@ VLESS 节点配置会写入：
 - `RealityMinClientVer: "1.8.0"`（兼容 Mihomo 等；xray-core ≥26.7.11）
 
 CDN / 后量子等进阶项见 [TLS_XHTTP_CDN_PQ.md](TLS_XHTTP_CDN_PQ.md) 与 [K2BOARD_INTEGRATION.md](K2BOARD_INTEGRATION.md)。
+
+选 `[4]` 时，Hysteria2 节点会写入：
+
+- `NodeType: hysteria2`
+- `EnableReality: false`
+- `CertConfig.ALPN: ["h3"]`
+- 证书为 `file` 或 `http`
+
+监听的是面板端口上的 **UDP**。说明见 [HYSTERIA2.md](HYSTERIA2.md)。
 
 ## 可选：WARP 解锁 AI / 流媒体
 

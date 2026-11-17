@@ -30,6 +30,7 @@ import (
 	_ "github.com/xtls/xray-core/proxy/freedom"
 	_ "github.com/xtls/xray-core/proxy/http"
 	// _ "github.com/xtls/xray-core/proxy/mtproto" // removed in xray-core v1.8.x
+	_ "github.com/xtls/xray-core/proxy/hysteria"
 	_ "github.com/xtls/xray-core/proxy/shadowsocks"
 	_ "github.com/xtls/xray-core/proxy/socks"
 	_ "github.com/xtls/xray-core/proxy/trojan"

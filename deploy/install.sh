@@ -2,7 +2,10 @@
 # ============================================================================
 # XrayR v0.9.16 VPS 一键部署脚本
 # 支持: Debian 12/13, Ubuntu 20.04+/22.04+/24.04+
-# 内置 xray-core v26.7.11 | VLESS + REALITY / TLS+XHTTP+CDN / AnyTLS + TLS
+# 源码内嵌 xray-core v26.11.9 | VLESS + REALITY / TLS+XHTTP+CDN / AnyTLS + TLS / Hysteria2 + TLS
+# GitHub Release v0.9.16 的预编译二进制仍是 xray-core v26.7.11。
+# Hysteria2 见 deploy/HYSTERIA2.md。菜单 [1][2][3] 的配置不变。
+# 已发布的 v0.9.16 不含 Hysteria2；选 [4] 必须使用同目录的本地 ./XrayR。
 # 密钥生成: XrayR tools {x25519|mldsa65|vlessenc|mlkem768|uuid}
 #
 # 用法:
@@ -33,6 +36,9 @@ XRAYR_BIN_NAME="XrayR"
 XRAYR_SERVICE="/etc/systemd/system/xrayr.service"
 XRAYR_REPO="HenZenKuriRIP/XrayR4u"
 XRAYR_VERSION="v0.9.16"
+# v0.9.16 的 Release 二进制没有 Hysteria2 分支。为 true 时，选项 [4]
+# 只接受脚本同目录的 ./XrayR，不会下载上面的 Release。
+HYSTERIA2_NEEDS_LOCAL_BINARY=true
 
 # ============================================================================
 # 卸载函数
@@ -294,6 +300,146 @@ echo ""
 echo -e "  ${GREEN}节点 ID 已记录: ${NODE_ID}${NC}"
 pause 1
 
+# 收集 TLS 域名和证书。仅 Hysteria2 调用。AnyTLS 仍走下面原来的提示，避免两边互相影响。
+collect_hysteria2_tls() {
+    echo ""
+    log_step "第二步续：Hysteria2 域名 & TLS 证书"
+
+    while true; do
+        echo ""
+        echo -e "  ${BOLD}请输入 Hysteria2 节点域名：${NC}"
+        echo -e "  ${YELLOW}例如: hy2.your-domain.com（需提前将 DNS A 记录指向本机 IP）${NC}"
+        echo -e "  ${YELLOW}客户端 SNI 必须是这个域名。协议监听 UDP，不是 TCP。${NC}"
+        read -r -p "  → " DOMAIN_NAME
+
+        if [[ -z "$DOMAIN_NAME" ]]; then
+            log_warn "域名不能为空"
+            continue
+        fi
+        if [[ ! "$DOMAIN_NAME" =~ \. ]]; then
+            log_warn "请输入完整域名（如 hy2.example.com）"
+            continue
+        fi
+        break
+    done
+    echo ""
+    echo -e "  ${GREEN}域名已记录: ${DOMAIN_NAME}${NC}"
+
+    echo ""
+    echo -e "  ${BOLD}━━━ TLS 证书配置 ━━━${NC}"
+    echo ""
+
+    CANDIDATES=(
+        "acme.sh (ECC)|/root/.acme.sh/${DOMAIN_NAME}_ecc/fullchain.cer|/root/.acme.sh/${DOMAIN_NAME}_ecc/${DOMAIN_NAME}.key"
+        "acme.sh (RSA)|/root/.acme.sh/${DOMAIN_NAME}/fullchain.cer|/root/.acme.sh/${DOMAIN_NAME}/${DOMAIN_NAME}.key"
+        "Let's Encrypt|/etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem|/etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem"
+        "/etc/ssl|/etc/ssl/${DOMAIN_NAME}.crt|/etc/ssl/${DOMAIN_NAME}.key"
+        "/etc/ssl (pem)|/etc/ssl/${DOMAIN_NAME}.pem|/etc/ssl/${DOMAIN_NAME}.key"
+    )
+
+    FOUND_CERT=""
+    FOUND_KEY=""
+    FOUND_DESC=""
+
+    echo -e "  ${CYAN}正在搜索域名 ${DOMAIN_NAME} 的已有证书...${NC}"
+    echo ""
+    for candidate in "${CANDIDATES[@]}"; do
+        IFS='|' read -r desc crt key <<< "$candidate"
+        if [[ -f "$crt" && -f "$key" ]]; then
+            FOUND_CERT="$crt"
+            FOUND_KEY="$key"
+            FOUND_DESC="$desc"
+            log_info "发现已有证书: ${desc}"
+            echo -e "      证书: ${GREEN}${crt}${NC}"
+            echo -e "      私钥: ${GREEN}${key}${NC}"
+            break
+        fi
+    done
+
+    CERT_FILE_PATH=""
+    KEY_FILE_PATH=""
+    if [[ -n "$FOUND_CERT" ]]; then
+        echo ""
+        echo -e "  ${BOLD}是否使用自动检测到的证书？${NC}"
+        echo -e "  ${GREEN}[Y]${NC} 使用检测到的证书  ${YELLOW}[N]${NC} 手动指定路径"
+        read -r -n 1 -p "  → " use_found
+        echo ""
+        if [[ "$use_found" = "Y" || "$use_found" = "y" ]]; then
+            CERT_FILE_PATH="$FOUND_CERT"
+            KEY_FILE_PATH="$FOUND_KEY"
+            log_info "已自动配置: ${FOUND_DESC}"
+        fi
+    fi
+
+    if [[ -z "$CERT_FILE_PATH" ]]; then
+        if [[ -z "$FOUND_CERT" ]]; then
+            echo -e "  ${YELLOW}未检测到域名 ${DOMAIN_NAME} 的已有证书${NC}"
+        fi
+
+        echo ""
+        echo -e "  ${BOLD}请选择证书获取方式：${NC}"
+        echo ""
+        echo -e "  ${GREEN}[1]${NC} 自动申请 Let's Encrypt（HTTP 验证，需 80/TCP 对外开放）"
+        echo -e "  ${GREEN}[2]${NC} 手动输入已有证书路径"
+        echo ""
+
+        while true; do
+            read -r -n 1 -p "  → " cert_choice
+            echo ""
+            case "$cert_choice" in
+                1)
+                    CERT_MODE="http"
+                    while true; do
+                        echo -e "  ${BOLD}请输入通知邮箱（Let's Encrypt 要求）：${NC}"
+                        read -r -p "  → " CERT_EMAIL
+                        if [[ -z "$CERT_EMAIL" || ! "$CERT_EMAIL" =~ @ ]]; then
+                            log_warn "请输入有效的邮箱地址"
+                            continue
+                        fi
+                        break
+                    done
+                    echo -e "  ${GREEN}证书模式: HTTP 自动申请${NC}"
+                    echo -e "  ${GREEN}通知邮箱: ${CERT_EMAIL}${NC}"
+                    break
+                    ;;
+                2)
+                    CERT_MODE="file"
+                    while true; do
+                        echo -e "  ${BOLD}请输入证书文件完整路径（.crt / .pem）：${NC}"
+                        read -r -p "  → " CERT_FILE_PATH
+                        if [[ -f "$CERT_FILE_PATH" ]]; then
+                            break
+                        fi
+                        log_warn "文件不存在: $CERT_FILE_PATH"
+                    done
+                    while true; do
+                        echo -e "  ${BOLD}请输入私钥文件完整路径（.key）：${NC}"
+                        read -r -p "  → " KEY_FILE_PATH
+                        if [[ -f "$KEY_FILE_PATH" ]]; then
+                            break
+                        fi
+                        log_warn "文件不存在: $KEY_FILE_PATH"
+                    done
+                    break
+                    ;;
+                *) log_warn "请输入 1 或 2" ;;
+            esac
+        done
+    else
+        CERT_MODE="file"
+    fi
+
+    if [[ "$CERT_MODE" == "file" ]]; then
+        echo -e "  ${GREEN}证书: ${CERT_FILE_PATH}${NC}"
+        echo -e "  ${GREEN}私钥: ${KEY_FILE_PATH}${NC}"
+    fi
+    echo ""
+    echo -e "  ${YELLOW}Hysteria2 不使用 REALITY，也不使用 AnyTLS Fallback。${NC}"
+    echo -e "  ${YELLOW}配置会写入 ALPN: [\"h3\"]。混淆和 Brutal 默认关闭。${NC}"
+    echo ""
+    pause 2
+}
+
 # ---------------------------------------------------------------------------
 # 协议选择
 # ---------------------------------------------------------------------------
@@ -305,6 +451,9 @@ echo ""
 echo -e "  ${GREEN}[1]${NC} VLESS + REALITY     — 无需域名，抗封锁标准方案"
 echo -e "  ${GREEN}[2]${NC} AnyTLS + TLS        — 需要域名，自动申请证书"
 echo -e "  ${GREEN}[3]${NC} VLESS + AnyTLS 双协议 — 同一 VPS 同时运行两种协议"
+echo -e "  ${GREEN}[4]${NC} Hysteria2 + TLS      — 需要域名和证书，监听 UDP"
+echo -e "      ${YELLOW}已有 VLESS / AnyTLS 时不要选 [4]：本脚本会整份覆盖 config.yml。${NC}"
+echo -e "      ${YELLOW}追加到正在运行的节点请看 deploy/HYSTERIA2.md。${NC}"
 echo ""
 
 INSTALL_MODE=""
@@ -315,20 +464,29 @@ while true; do
         1) INSTALL_MODE="vless"; break ;;
         2) INSTALL_MODE="anytls"; break ;;
         3) INSTALL_MODE="dual"; break ;;
-        *) log_warn "请输入 1、2 或 3" ;;
+        4) INSTALL_MODE="hysteria2"; break ;;
+        *) log_warn "请输入 1、2、3 或 4" ;;
     esac
 done
 
 INSTALL_VLESS=false
 INSTALL_ANYTLS=false
+INSTALL_HY2=false
 case "$INSTALL_MODE" in
     vless) INSTALL_VLESS=true ;;
     anytls) INSTALL_ANYTLS=true ;;
     dual) INSTALL_VLESS=true; INSTALL_ANYTLS=true ;;
+    hysteria2) INSTALL_HY2=true ;;
 esac
 
 echo ""
 echo -e "  ${GREEN}已选择: ${INSTALL_MODE}${NC}"
+if $INSTALL_HY2; then
+    echo ""
+    echo -e "  ${YELLOW}已发布的 ${XRAYR_VERSION} 不含 Hysteria2。${NC}"
+    echo -e "  ${YELLOW}请把包含该功能的二进制放在脚本同目录，文件名必须是 XrayR。${NC}"
+    echo -e "  ${YELLOW}本选项不会从 GitHub Release 下载 ${XRAYR_VERSION}。${NC}"
+fi
 pause 1
 
 # ---------------------------------------------------------------------------
@@ -627,6 +785,10 @@ NGINX_CONF
     pause 2
 fi
 
+if $INSTALL_HY2; then
+    collect_hysteria2_tls
+fi
+
 # REALITY 不需要域名/证书
 if $INSTALL_VLESS; then
     echo ""
@@ -651,6 +813,15 @@ echo -e "  │  🟢 VLESS 节点:  面板 NodeID ${NODE_ID}${NC}"
 fi
 if $INSTALL_ANYTLS; then
 echo -e "  │  🔵 AnyTLS 节点:  面板 NodeID ${ANYTLS_NODE_ID}${NC}"
+echo -e "  │     域名:     ${GREEN}${DOMAIN_NAME}${NC}"
+if [[ "$CERT_MODE" == "http" ]]; then
+echo -e "  │     证书:     ${GREEN}HTTP 自动申请 (${CERT_EMAIL})${NC}"
+else
+echo -e "  │     证书:     ${GREEN}${CERT_FILE_PATH}${NC}"
+fi
+fi
+if $INSTALL_HY2; then
+echo -e "  │  🟣 Hysteria2: 面板 NodeID ${NODE_ID}，UDP + TLS${NC}"
 echo -e "  │     域名:     ${GREEN}${DOMAIN_NAME}${NC}"
 if [[ "$CERT_MODE" == "http" ]]; then
 echo -e "  │     证书:     ${GREEN}HTTP 自动申请 (${CERT_EMAIL})${NC}"
@@ -694,13 +865,23 @@ while true; do
                     echo -e "  ${GREEN}已更新: ${NODE_ID}${NC}"
                     ;;
                 4)
-                    echo -e "  [1] VLESS+REALITY  [2] AnyTLS+TLS  [3] VLESS+AnyTLS 双协议"
+                    echo -e "  [1] VLESS+REALITY  [2] AnyTLS+TLS  [3] VLESS+AnyTLS 双协议  [4] Hysteria2+TLS"
+                    echo -e "  ${YELLOW}这里只改协议标记。改到尚未填过证书的协议时，会补问域名和证书。${NC}"
                     read -r -n 1 -p "  → " mode
                     echo ""
                     case "$mode" in
-                        1) INSTALL_MODE="vless"; INSTALL_VLESS=true; INSTALL_ANYTLS=false ;;
-                        2) INSTALL_MODE="anytls"; INSTALL_VLESS=false; INSTALL_ANYTLS=true ;;
-                        3) INSTALL_MODE="dual"; INSTALL_VLESS=true; INSTALL_ANYTLS=true ;;
+                        1) INSTALL_MODE="vless"; INSTALL_VLESS=true; INSTALL_ANYTLS=false; INSTALL_HY2=false ;;
+                        2) INSTALL_MODE="anytls"; INSTALL_VLESS=false; INSTALL_ANYTLS=true; INSTALL_HY2=false ;;
+                        3) INSTALL_MODE="dual"; INSTALL_VLESS=true; INSTALL_ANYTLS=true; INSTALL_HY2=false ;;
+                        4)
+                            INSTALL_MODE="hysteria2"
+                            INSTALL_VLESS=false
+                            INSTALL_ANYTLS=false
+                            INSTALL_HY2=true
+                            if [[ -z "${CERT_MODE}" ]]; then
+                                collect_hysteria2_tls
+                            fi
+                            ;;
                     esac
                     echo -e "  ${GREEN}已更新: ${INSTALL_MODE}${NC}"
                     ;;
@@ -718,6 +899,13 @@ pause 1
 
 if [[ $EUID -ne 0 ]]; then
     log_error "请使用 root 用户运行此脚本（sudo bash install.sh）"
+fi
+
+# 选项 [4] 会整份重写 config.yml。已经在跑 VLESS / AnyTLS 时直接停止。
+if $INSTALL_HY2 && [[ -f "$XRAYR_INSTALL_DIR/config.yml" ]]; then
+    if grep -E -q 'NodeType:[[:space:]]*(Vless|vless|anytls|Anytls|AnyTLS)' "$XRAYR_INSTALL_DIR/config.yml"; then
+        log_error "检测到 ${XRAYR_INSTALL_DIR}/config.yml 里已有 VLESS 或 AnyTLS。安装脚本会覆盖整份配置，已停止。请备份后按 deploy/HYSTERIA2.md 追加 Hysteria2 节点。"
+    fi
 fi
 
 # 检查系统
@@ -774,6 +962,19 @@ log_step "第六步：安装 XrayR 核心程序"
 pause 1
 
 install_xrayr() {
+    if $INSTALL_HY2 && $HYSTERIA2_NEEDS_LOCAL_BINARY && [[ ! -f "./XrayR" ]]; then
+        echo ""
+        echo -e "  ${RED}Hysteria2 安装需要脚本同目录中的本地二进制 ./XrayR${NC}"
+        echo -e "  ${YELLOW}GitHub Release ${XRAYR_VERSION} 还没有 Hysteria2。下载那个版本后把 NodeType 写成 hysteria2，旧程序会把它当成 VLESS。${NC}"
+        echo ""
+        echo -e "  ${BOLD}在开发机编译并上传：${NC}"
+        echo -e "  ${GREEN}CGO_ENABLED=0 GOOS=linux GOARCH=${PLATFORM} go build -mod=vendor -trimpath -ldflags \"-s -w -buildid=\" -o XrayR ./main${NC}"
+        echo -e "  ${GREEN}scp XrayR root@<VPS_IP>:/root/${NC}"
+        echo ""
+        echo -e "  ${YELLOW}上传后在该目录重新运行本脚本，并选择 [4]。${NC}"
+        return 1
+    fi
+
     if [[ -f "./XrayR" ]]; then
         log_info "检测到本地 XrayR 二进制文件，直接安装..."
         cp ./XrayR "$XRAYR_BIN_DIR/$XRAYR_BIN_NAME"
@@ -870,7 +1071,7 @@ pause 1
 cat > "$XRAYR_INSTALL_DIR/config.yml" << YML
 # ============================================================================
 # XrayR 配置文件 — 安装模式: ${INSTALL_MODE}
-# 内置 xray-core v26.7.11 | XrayR4u v0.9.16
+# 内置 xray-core v26.11.9 | XrayR4u v0.9.16
 # ============================================================================
 Log:
   Level: warning
@@ -975,6 +1176,55 @@ YML
     else
         log_info "AnyTLS 节点配置已添加 (${CERT_MODE} 证书, 无 Fallback)"
     fi
+fi
+
+# --- Hysteria2 节点（独立条目；不改上面的 VLESS / AnyTLS 块） ---
+if $INSTALL_HY2; then
+    cat >> "$XRAYR_INSTALL_DIR/config.yml" << YML
+  - PanelType: "V2board"
+    ApiConfig:
+      ApiHost: "$V2BOARD_HOST"
+      ApiKey: "$V2BOARD_KEY"
+      NodeID: $NODE_ID
+      NodeType: hysteria2
+      Timeout: 30
+      EnableReality: false
+      SpeedLimit: 0
+      DeviceLimit: 0
+      DisableCustomConfig: false
+      RuleListPath:
+    ControllerConfig:
+      ListenIP: 0.0.0.0
+      SendIP: 0.0.0.0
+      UpdatePeriodic: 60
+      EnableDNS: false
+      DNSType: AsIs
+      EnableProxyProtocol: false
+      EnableFallback: false
+      DisableSniffing: false
+      DisableUploadTraffic: false
+      DisableGetRule: false
+      DisableIVCheck: false
+      # 密码是面板用户 UUID。传输固定为 hysteria / UDP / ALPN h3。
+      # 不读取 Transport、XHTTP、REALITY。可选混淆见 deploy/HYSTERIA2.md。
+      # Hysteria2:
+      #   MasqType: "404"
+      #   ObfsPassword: ""
+      #   Congestion: ""
+      #   Up: ""
+      #   Down: ""
+      CertConfig:
+        CertMode: $CERT_MODE
+        CertDomain: "$DOMAIN_NAME"
+        ALPN: ["h3"]
+        $(if [[ "$CERT_MODE" == "file" ]]; then
+            echo "CertFile: \"$CERT_FILE_PATH\""
+            echo "        KeyFile: \"$KEY_FILE_PATH\""
+        elif [[ "$CERT_MODE" == "http" ]]; then
+            echo "Email: \"$CERT_EMAIL\""
+        fi)
+YML
+    log_info "Hysteria2 节点配置已添加 (${CERT_MODE} 证书, ALPN h3, UDP)"
 fi
 
 log_info "主配置: ${XRAYR_INSTALL_DIR}/config.yml"
@@ -1353,6 +1603,10 @@ else
 echo -e "  │     Fallback: ${RED}未配置（有指纹风险）${NC}"
 fi
 fi
+if $INSTALL_HY2; then
+echo -e "  │  🟣 Hysteria2: NodeID ${NODE_ID}, UDP, 域名 ${GREEN}${DOMAIN_NAME}${NC}"
+echo -e "  │     ALPN:      ${GREEN}h3${NC}    REALITY: ${GREEN}关闭${NC}"
+fi
 echo -e "  │  配置文件:   ${YELLOW}${XRAYR_INSTALL_DIR}/config.yml${NC}"
 echo -e "  │  日志目录:   ${YELLOW}${XRAYR_INSTALL_DIR}/log/${NC}"
 echo -e "  └─────────────────────────────────────────────┘"
@@ -1363,7 +1617,10 @@ echo -e "  ${BOLD}🔧 常用管理命令${NC}"
 echo ""
 echo -e "  ${GREEN}systemctl status xrayr${NC}      查看服务状态"
 echo -e "  ${GREEN}journalctl -u xrayr -f${NC}      查看实时日志"
-echo -e "  ${GREEN}ss -tlnp | grep XrayR${NC}       查看监听端口"
+echo -e "  ${GREEN}ss -tlnp | grep XrayR${NC}       查看 TCP 监听"
+if $INSTALL_HY2; then
+echo -e "  ${GREEN}ss -ulnp | grep XrayR${NC}       查看 Hysteria2 的 UDP 监听"
+fi
 echo -e "  ${GREEN}systemctl restart xrayr${NC}     重启服务"
 echo -e "  ${GREEN}vi ${XRAYR_INSTALL_DIR}/config.yml${NC}   编辑配置"
 echo ""
@@ -1395,6 +1652,14 @@ fi
 echo ""
 fi
 
+if $INSTALL_HY2; then
+echo -e "  ${YELLOW}💡 Hysteria2 监听 UDP。云安全组请放行面板上的 UDP 端口，不要只放行 TCP。${NC}"
+echo -e "  ${YELLOW}   证书申请若选了 HTTP 验证，另外需要开放 80/TCP。${NC}"
+echo -e "  ${YELLOW}   客户端: hysteria2://<用户UUID>@${DOMAIN_NAME}:<端口>?sni=${DOMAIN_NAME}${NC}"
+echo -e "  ${YELLOW}   面板订阅还不会自动生成这条链接。${NC}"
+echo ""
+fi
+
 echo -e "  ${YELLOW}💡 端口由 V2Board 面板控制，XrayR 自动获取，无需手动配置${NC}"
 echo -e "  在面板后台配置节点的监听端口后，XrayR 会自动拉取并监听"
 echo ""
@@ -1404,8 +1669,11 @@ echo -e "  ${RED}🔴 如果端口不通，请按顺序检查：${NC}"
 echo -e "  1. 云控制台防火墙 (Vultr/AWS/阿里云 安全组) ← ${BOLD}最常见原因${NC}"
 echo -e "  2. 系统 iptables/ufw:  ${GREEN}iptables -L -n${NC}"
 echo -e "  3. XrayR 监听状态:     ${GREEN}ss -tlnp | grep XrayR${NC}"
+if $INSTALL_HY2; then
+echo -e "     Hysteria2 UDP:      ${GREEN}ss -ulnp | grep XrayR${NC}"
+fi
 echo -e "  4. 面板端口配置:       面板 → 节点 → port 字段"
-if $INSTALL_ANYTLS; then
+if $INSTALL_ANYTLS || $INSTALL_HY2; then
 echo -e "  5. TLS 证书:           ${GREEN}journalctl -u xrayr | grep -i cert${NC}"
 fi
 echo ""

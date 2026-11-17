@@ -16,8 +16,9 @@ import (
 	"github.com/xtls/xray-core/infra/conf"
 )
 
-// defaultRealityMinClientVer is used when neither config.yml nor panel
-// supplies minClientVer. Must stay non-empty for xray-core ≥ 26.7.11.
+// defaultRealityMinClientVer is used when neither config.yml nor the panel
+// supplies minClientVer. Kept at 1.8.0 so clients that report 1.8.x still
+// pass the version check. v26.11.9 no longer fills 26.3.27 itself.
 const defaultRealityMinClientVer = "1.8.0"
 
 // InboundBuilder build Inbound config for different protocol
@@ -46,6 +47,13 @@ func InboundBuilder(config *Config, nodeInfo *api.NodeInfo, tag string) (*core.I
 	}
 	inboundDetourConfig.SniffingConfig = sniffingConfig
 
+	// Hysteria2 returns before the shared stream builder. A copied Transport
+	// (xhttp/ws) or an empty XHTTP path must not fail this node, and must not
+	// change how VLESS and AnyTLS resolve transport or ALPN.
+	if nodeInfo != nil && api.IsHysteriaNode(nodeInfo.NodeType) {
+		return buildHysteriaHandlerConfig(config, nodeInfo, tag, sniffingConfig)
+	}
+
 	// Build streamSettings (shared across protocols)
 	streamSetting, err := buildStreamSetting(config, nodeInfo)
 	if err != nil {
@@ -53,8 +61,11 @@ func InboundBuilder(config *Config, nodeInfo *api.NodeInfo, tag string) (*core.I
 	}
 
 	// ---- Protocol selection ----
-	nodeType := strings.ToLower(nodeInfo.NodeType)
-	if nodeType == "anytls" {
+	nodeType := ""
+	if nodeInfo != nil {
+		nodeType = nodeInfo.NodeType
+	}
+	if strings.EqualFold(nodeType, "anytls") {
 		return buildAnyTLSHandlerConfig(config, nodeInfo, tag, streamSetting, sniffingConfig)
 	}
 
@@ -121,7 +132,8 @@ func resolveVlessDecryption(config *Config, nodeInfo *api.NodeInfo) string {
 // without going through conf.InboundDetourConfig.Build().
 //
 // Local ControllerConfig can fully drive TLS+XHTTP+CDN without panel fields:
-//   Transport, Security, XHTTP.*, CertConfig (ALPN/curves), EnableProxyProtocol.
+//
+//	Transport, Security, XHTTP.*, CertConfig (ALPN/curves), EnableProxyProtocol.
 func buildStreamSetting(config *Config, nodeInfo *api.NodeInfo) (*conf.StreamConfig, error) {
 	streamSetting := new(conf.StreamConfig)
 	transportProtocolName := resolveTransport(config, nodeInfo)
@@ -287,7 +299,6 @@ func buildAnyTLSHandlerConfig(config *Config, nodeInfo *api.NodeInfo, tag string
 	}, nil
 }
 
-
 func normalizeSecurityType(security string) string {
 	switch strings.ToLower(security) {
 	case "xtls":
@@ -311,8 +322,7 @@ func applyRealityLocalOverrides(config *Config, realitySettings *conf.REALITYCon
 		}
 		return
 	}
-	// minClientVer: local override → panel → built-in default (must stay non-empty
-	// for xray-core ≥ 26.7.11 so the core does not force 26.3.27).
+	// minClientVer: local override → panel → built-in default.
 	if v := strings.TrimSpace(config.RealityMinClientVer); v != "" {
 		realitySettings.MinClientVer = v
 	} else if strings.TrimSpace(realitySettings.MinClientVer) == "" {
