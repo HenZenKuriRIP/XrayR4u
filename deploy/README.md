@@ -1,4 +1,4 @@
-# XrayR4u v0.9.16 VPS 部署
+# XrayR4u v0.9.17 VPS 部署
 
 ## 适用场景
 
@@ -8,7 +8,7 @@
 | 架构 | amd64 / arm64 |
 | 面板 | K2Board (UniProxy) |
 | 协议 | VLESS + REALITY / TLS + XHTTP + CDN / AnyTLS + TLS / Hysteria2 + TLS |
-| 核心 | Xray-core **v26.11.9**（源码內嵌）。已发布的 XrayR4u v0.9.16 二进制仍是 v26.7.11 |
+| 核心 | Xray-core **v26.11.9**。v0.9.17 发布二进制与源码一致。v0.9.16 二进制仍是 v26.7.11 |
 
 ## 一行命令
 
@@ -21,11 +21,11 @@ bash <(curl -sSL https://raw.githubusercontent.com/HenZenKuriRIP/XrayR4u/main/de
 3. 节点 ID  
 4. 协议：`[1]` VLESS + REALITY / `[2]` AnyTLS + TLS / `[3]` 双协议 / `[4]` Hysteria2 + TLS
 
-`[1]` 到 `[3]` 的配置和以前一样，可以继续使用 Release **v0.9.16**。
+`[1]` 到 `[3]` 的配置和以前一样。四个选项都可以下载 Release **v0.9.17**。
 
-`[4]` 只适合新机器。已发布的 v0.9.16 不含 Hysteria2，脚本不会为这个选项下载 Release；把包含该功能的 `./XrayR` 放在脚本同目录。已经在跑 VLESS 或 AnyTLS 的机器不要选 `[4]`，安装会整份覆盖 `config.yml`，脚本发现旧节点后会退出。追加方式见 [HYSTERIA2.md](HYSTERIA2.md)。
+`[4]` 只适合新机器。已经在跑 VLESS 或 AnyTLS 的机器不要选 `[4]`，安装会整份覆盖 `config.yml`，脚本发现旧节点后会退出。追加方式见 [HYSTERIA2.md](HYSTERIA2.md)。Hysteria2 听 UDP，脚本会放行 UDP 443；面板端口不是 443 时要另开。
 
-> 离线：本机编译或下载 Release 的 `XrayR-linux-amd64` 重命名为 `XrayR`，与 `install.sh` 同目录后执行。Hysteria2 只能用本机编译的这份二进制，不能用 v0.9.16 的 Release。
+> 离线：下载 Release 的 `XrayR-linux-amd64` 重命名为 `XrayR`，与 `install.sh` 同目录后执行。不要用 v0.9.16 的 Release 装 Hysteria2。
 
 ### 本机交叉编译（linux amd64）
 

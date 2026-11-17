@@ -1,7 +1,7 @@
 # ============================================================================
-# XrayR4u 配置文件模版 v0.9.16
+# XrayR4u 配置文件模版 v0.9.17
 # ============================================================================
-# 内置 Xray-core v26.7.11 (REALITY / XHTTP+CDN / Vision / VLESS Encryption / AnyTLS)
+# 内置 Xray-core v26.11.9 (REALITY / XHTTP+CDN / Vision / VLESS Encryption / AnyTLS / Hysteria2)
 # 配置文件需放置在 /etc/XrayR/config.yml
 # 或在启动时通过 --config 参数指定路径
 #

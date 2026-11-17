@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # ============================================================================
-# XrayR v0.9.16 VPS 一键部署脚本
+# XrayR v0.9.17 VPS 一键部署脚本
 # 支持: Debian 12/13, Ubuntu 20.04+/22.04+/24.04+
-# 源码内嵌 xray-core v26.11.9 | VLESS + REALITY / TLS+XHTTP+CDN / AnyTLS + TLS / Hysteria2 + TLS
-# GitHub Release v0.9.16 的预编译二进制仍是 xray-core v26.7.11。
+# 源码与本版本 Release 均内嵌 xray-core v26.11.9
+# 协议: VLESS + REALITY / TLS+XHTTP+CDN / AnyTLS + TLS / Hysteria2 + TLS
 # Hysteria2 见 deploy/HYSTERIA2.md。菜单 [1][2][3] 的配置不变。
-# 已发布的 v0.9.16 不含 Hysteria2；选 [4] 必须使用同目录的本地 ./XrayR。
+# v0.9.16 的 Release 仍是 xray-core v26.7.11，没有 Hysteria2，不要用那个二进制。
 # 密钥生成: XrayR tools {x25519|mldsa65|vlessenc|mlkem768|uuid}
 #
 # 用法:
@@ -35,10 +35,10 @@ XRAYR_BIN_DIR="/usr/local/bin"
 XRAYR_BIN_NAME="XrayR"
 XRAYR_SERVICE="/etc/systemd/system/xrayr.service"
 XRAYR_REPO="HenZenKuriRIP/XrayR4u"
-XRAYR_VERSION="v0.9.16"
-# v0.9.16 的 Release 二进制没有 Hysteria2 分支。为 true 时，选项 [4]
-# 只接受脚本同目录的 ./XrayR，不会下载上面的 Release。
-HYSTERIA2_NEEDS_LOCAL_BINARY=true
+XRAYR_VERSION="v0.9.17"
+# v0.9.17 的 Release 已含 Hysteria2。为 false 时，选项 [4] 可以下载该 Release。
+# 同目录若已有 ./XrayR，脚本仍优先使用本地文件。
+HYSTERIA2_NEEDS_LOCAL_BINARY=false
 
 # ============================================================================
 # 卸载函数
@@ -202,7 +202,7 @@ clear
 echo ""
 echo -e "${CYAN}╔═══════════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║                                                   ║${NC}"
-echo -e "${CYAN}║        ${BOLD}XrayR v0.9.16 — VPS 一键部署脚本${NC}${CYAN}             ║${NC}"
+echo -e "${CYAN}║        ${BOLD}XrayR v0.9.17 — VPS 一键部署脚本${NC}${CYAN}             ║${NC}"
 echo -e "${CYAN}║   VLESS+REALITY / TLS+XHTTP+CDN / AnyTLS+TLS      ║${NC}"
 echo -e "${CYAN}║        适配 K2Board (UniProxy) 面板                 ║${NC}"
 echo -e "${CYAN}║                                                   ║${NC}"
@@ -483,9 +483,9 @@ echo ""
 echo -e "  ${GREEN}已选择: ${INSTALL_MODE}${NC}"
 if $INSTALL_HY2; then
     echo ""
-    echo -e "  ${YELLOW}已发布的 ${XRAYR_VERSION} 不含 Hysteria2。${NC}"
-    echo -e "  ${YELLOW}请把包含该功能的二进制放在脚本同目录，文件名必须是 XrayR。${NC}"
-    echo -e "  ${YELLOW}本选项不会从 GitHub Release 下载 ${XRAYR_VERSION}。${NC}"
+    echo -e "  ${YELLOW}Hysteria2 监听 UDP。云安全组和系统防火墙都要放行面板上的 UDP 端口。${NC}"
+    echo -e "  ${YELLOW}本选项会下载 ${XRAYR_VERSION}。同目录已有 ./XrayR 时使用本地文件。${NC}"
+    echo -e "  ${YELLOW}不要在已经运行 VLESS / AnyTLS 的机器上选择本选项。${NC}"
 fi
 pause 1
 
@@ -1071,7 +1071,7 @@ pause 1
 cat > "$XRAYR_INSTALL_DIR/config.yml" << YML
 # ============================================================================
 # XrayR 配置文件 — 安装模式: ${INSTALL_MODE}
-# 内置 xray-core v26.11.9 | XrayR4u v0.9.16
+# 内置 xray-core v26.11.9 | XrayR4u v0.9.17
 # ============================================================================
 Log:
   Level: warning
@@ -1401,20 +1401,30 @@ pause 2
 log_step "第十一步：防火墙配置"
 pause 1
 
-# 确定需要放行的端口
-FIREWALL_PORTS=(443)              # VLESS REALITY / AnyTLS TLS
+# 确定需要放行的端口。面板端口若不是 443，还要按实际 server_port 另开。
+FIREWALL_PORTS=(443)              # VLESS REALITY / AnyTLS TLS / Hysteria2 默认
 if $INSTALL_VLESS || [[ "$CERT_MODE" == "http" ]]; then
     FIREWALL_PORTS+=(80)          # REALITY fallback / Let's Encrypt HTTP
 fi
 # 去重
 FIREWALL_PORTS=($(printf '%s\n' "${FIREWALL_PORTS[@]}" | sort -u))
+FIREWALL_UDP_PORTS=()
+if $INSTALL_HY2; then
+    FIREWALL_UDP_PORTS=(443)      # Hysteria2 听 UDP，不是 TCP
+fi
 
-log_info "需要放行的端口: ${FIREWALL_PORTS[*]}"
+log_info "需要放行的 TCP 端口: ${FIREWALL_PORTS[*]}"
+if [[ ${#FIREWALL_UDP_PORTS[@]} -gt 0 ]]; then
+    log_info "需要放行的 UDP 端口: ${FIREWALL_UDP_PORTS[*]}"
+fi
 
 if command -v ufw &>/dev/null && ufw status 2>/dev/null | grep -q "active"; then
     log_info "检测到 UFW，添加规则..."
     for port in "${FIREWALL_PORTS[@]}"; do
         ufw allow $port/tcp comment "XrayR port $port" 2>/dev/null || true
+    done
+    for port in "${FIREWALL_UDP_PORTS[@]}"; do
+        ufw allow $port/udp comment "XrayR UDP port $port" 2>/dev/null || true
     done
     ufw reload 2>/dev/null || true
     log_info "UFW 规则已添加"
@@ -1424,18 +1434,28 @@ elif command -v firewall-cmd &>/dev/null && firewall-cmd --state 2>/dev/null | g
     for port in "${FIREWALL_PORTS[@]}"; do
         firewall-cmd --permanent --add-port=$port/tcp 2>/dev/null || true
     done
+    for port in "${FIREWALL_UDP_PORTS[@]}"; do
+        firewall-cmd --permanent --add-port=$port/udp 2>/dev/null || true
+    done
     firewall-cmd --reload 2>/dev/null || true
     log_info "firewalld 规则已添加"
 
 elif command -v nft &>/dev/null && nft list ruleset 2>/dev/null | grep -q "input"; then
     log_info "检测到 nftables"
     echo -e "  ${YELLOW}请手动执行: nft add rule inet filter input tcp dport {443,80} accept${NC}"
+    if $INSTALL_HY2; then
+        echo -e "  ${YELLOW}Hysteria2 另加: nft add rule inet filter input udp dport 443 accept${NC}"
+    fi
 
 elif command -v iptables &>/dev/null; then
     log_info "使用 iptables 添加规则..."
     for port in "${FIREWALL_PORTS[@]}"; do
         iptables -C INPUT -p tcp --dport $port -j ACCEPT 2>/dev/null || \
             iptables -A INPUT -p tcp --dport $port -j ACCEPT
+    done
+    for port in "${FIREWALL_UDP_PORTS[@]}"; do
+        iptables -C INPUT -p udp --dport $port -j ACCEPT 2>/dev/null || \
+            iptables -A INPUT -p udp --dport $port -j ACCEPT
     done
 
     # 持久化
@@ -1451,6 +1471,9 @@ else
     log_warn "未检测到系统防火墙"
     echo ""
     echo -e "  ${RED}⚠️  请务必检查云控制台防火墙，放行 TCP 443 端口：${NC}"
+    if $INSTALL_HY2; then
+        echo -e "  ${RED}⚠️  Hysteria2 还要放行 UDP 443（面板端口不是 443 时按实际端口）：${NC}"
+    fi
     echo -e "  ${YELLOW}  Vultr:   Products → Firewall → Add Rule (TCP 443)${NC}"
     echo -e "  ${YELLOW}  AWS:     EC2 → Security Groups → Inbound (TCP 443)${NC}"
     echo -e "  ${YELLOW}  阿里云:  ECS → 安全组 → 入方向 (TCP 443)${NC}"
