@@ -39,8 +39,9 @@ bash <(curl -sSL https://raw.githubusercontent.com/HenZenKuriRIP/XrayR4u/main/de
 2. AnyTLS + TLS
 3. VLESS + AnyTLS
 4. Hysteria2 + TLS
+5. VLESS + Hysteria2（新机器，两条节点）
 
-四个选项都使用 Release **v0.9.17**（内嵌 xray-core v26.11.9，含 Hysteria2）。已经在跑 VLESS 或 AnyTLS 时不要选 `[4]`：脚本会覆盖整份 `/etc/XrayR/config.yml`，发现旧节点后会退出。给现有服务器加 Hysteria2 时，替换二进制后按 [deploy/HYSTERIA2.md](deploy/HYSTERIA2.md) 追加一条节点。v0.9.16 的二进制没有这个协议。
+五个选项都使用 Release **v0.9.17**（内嵌 xray-core v26.11.9，含 Hysteria2）。`[5]` 会询问第二个 NodeID，VLESS 用第一个，Hysteria2 用第二个。已经在跑 VLESS 或 AnyTLS 时不要选 `[4]` 或 `[5]`：脚本会覆盖整份 `/etc/XrayR/config.yml`，发现旧节点后会退出。给现有服务器加 Hysteria2 时，替换二进制后按 [deploy/HYSTERIA2.md](deploy/HYSTERIA2.md) 追加一条节点。v0.9.16 的二进制没有这个协议。
 
 ---
 

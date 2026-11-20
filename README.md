@@ -75,7 +75,7 @@ XrayR tools help
 bash <(curl -sSL https://raw.githubusercontent.com/HenZenKuriRIP/XrayR4u/main/deploy/install.sh)
 ```
 
-交互输入面板地址、Token、节点 ID，选择协议后自动安装。`[1]` VLESS、`[2]` AnyTLS、`[3]` 双协议与原来相同。`[4]` Hysteria2 会下载本版本的 Release。它只用于新机器，并监听面板端口上的 UDP。已经在跑 VLESS 或 AnyTLS 的机器不要重跑脚本，脚本会整份覆盖 `config.yml`。追加方式见 [deploy/HYSTERIA2.md](deploy/HYSTERIA2.md)。
+交互输入面板地址、Token、节点 ID，选择协议后自动安装。`[1]` VLESS、`[2]` AnyTLS、`[3]` VLESS + AnyTLS、`[4]` Hysteria2 与原来相同。`[5]` 在新机器上同时写入 VLESS 和 Hysteria2，两条节点使用不同的面板 NodeID。`[4]` 和 `[5]` 都会下载本版本的 Release。Hysteria2 监听面板端口上的 UDP。已经在跑 VLESS 或 AnyTLS 的机器不要重跑脚本，脚本会整份覆盖 `config.yml`。追加方式见 [deploy/HYSTERIA2.md](deploy/HYSTERIA2.md)。
 
 ### 可选：WARP 解锁 AI / 流媒体
 

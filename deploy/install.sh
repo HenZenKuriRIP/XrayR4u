@@ -4,7 +4,8 @@
 # 支持: Debian 12/13, Ubuntu 20.04+/22.04+/24.04+
 # 源码与本版本 Release 均内嵌 xray-core v26.11.9
 # 协议: VLESS + REALITY / TLS+XHTTP+CDN / AnyTLS + TLS / Hysteria2 + TLS
-# Hysteria2 见 deploy/HYSTERIA2.md。菜单 [1][2][3] 的配置不变。
+# Hysteria2 见 deploy/HYSTERIA2.md。菜单 [1][2][3][4] 的配置不变。
+# [5] 只在新机器上同时写入 VLESS 和 Hysteria2，两条节点各用各的 NodeID。
 # v0.9.16 的 Release 仍是 xray-core v26.7.11，没有 Hysteria2，不要用那个二进制。
 # 密钥生成: XrayR tools {x25519|mldsa65|vlessenc|mlkem768|uuid}
 #
@@ -440,6 +441,41 @@ collect_hysteria2_tls() {
     pause 2
 }
 
+# VLESS + Hysteria2 时，第一个 NodeID 留给 VLESS，这里再要一个 Hysteria2 的。
+collect_hysteria2_node_id() {
+    echo ""
+    echo -e "  ${YELLOW}VLESS 和 Hysteria2 在面板上是两条节点，NodeID 不能相同。${NC}"
+    echo -e "  ${GREEN}已记录的 NodeID ${NODE_ID} 将用于 VLESS${NC}"
+    echo ""
+    while true; do
+        echo -e "  ${BOLD}请输入 Hysteria2 节点 ID：${NC}"
+        read -r -p "  → " HY2_NODE_ID
+        if [[ -z "$HY2_NODE_ID" ]]; then
+            log_warn "节点 ID 不能为空"
+            continue
+        fi
+        if [[ ! "$HY2_NODE_ID" =~ ^[0-9]+$ ]]; then
+            log_warn "节点 ID 必须是纯数字"
+            continue
+        fi
+        if [[ "$HY2_NODE_ID" == "$NODE_ID" ]]; then
+            log_warn "Hysteria2 节点 ID 不能和 VLESS 相同"
+            continue
+        fi
+        break
+    done
+    echo -e "  ${GREEN}VLESS NodeID: ${NODE_ID}  |  Hysteria2 NodeID: ${HY2_NODE_ID}${NC}"
+}
+
+# [4] 只有 Hysteria2 时用第一个 NodeID。[5] 用单独收集的 HY2_NODE_ID。
+hy2_panel_id() {
+    if $INSTALL_VLESS && $INSTALL_HY2; then
+        printf '%s' "$HY2_NODE_ID"
+    else
+        printf '%s' "$NODE_ID"
+    fi
+}
+
 # ---------------------------------------------------------------------------
 # 协议选择
 # ---------------------------------------------------------------------------
@@ -452,7 +488,8 @@ echo -e "  ${GREEN}[1]${NC} VLESS + REALITY     — 无需域名，抗封锁标�
 echo -e "  ${GREEN}[2]${NC} AnyTLS + TLS        — 需要域名，自动申请证书"
 echo -e "  ${GREEN}[3]${NC} VLESS + AnyTLS 双协议 — 同一 VPS 同时运行两种协议"
 echo -e "  ${GREEN}[4]${NC} Hysteria2 + TLS      — 需要域名和证书，监听 UDP"
-echo -e "      ${YELLOW}已有 VLESS / AnyTLS 时不要选 [4]：本脚本会整份覆盖 config.yml。${NC}"
+echo -e "  ${GREEN}[5]${NC} VLESS + Hysteria2    — 新机器同时写入两条节点"
+echo -e "      ${YELLOW}已有 VLESS / AnyTLS 时不要选 [4] 或 [5]：本脚本会整份覆盖 config.yml。${NC}"
 echo -e "      ${YELLOW}追加到正在运行的节点请看 deploy/HYSTERIA2.md。${NC}"
 echo ""
 
@@ -465,7 +502,8 @@ while true; do
         2) INSTALL_MODE="anytls"; break ;;
         3) INSTALL_MODE="dual"; break ;;
         4) INSTALL_MODE="hysteria2"; break ;;
-        *) log_warn "请输入 1、2、3 或 4" ;;
+        5) INSTALL_MODE="vless-hysteria2"; break ;;
+        *) log_warn "请输入 1、2、3、4 或 5" ;;
     esac
 done
 
@@ -477,6 +515,7 @@ case "$INSTALL_MODE" in
     anytls) INSTALL_ANYTLS=true ;;
     dual) INSTALL_VLESS=true; INSTALL_ANYTLS=true ;;
     hysteria2) INSTALL_HY2=true ;;
+    vless-hysteria2) INSTALL_VLESS=true; INSTALL_HY2=true ;;
 esac
 
 echo ""
@@ -499,6 +538,7 @@ CERT_FILE_PATH=""
 KEY_FILE_PATH=""
 ANYTLS_FALLBACK=""
 ANYTLS_NODE_ID=$NODE_ID  # 默认复用主 NodeID
+HY2_NODE_ID=""           # 仅 [5] 使用；[4] 继续用 NODE_ID
 
 # 双协议模式：面板上 VLESS 和 AnyTLS 是不同的节点，NodeID 不同
 if $INSTALL_VLESS && $INSTALL_ANYTLS; then
@@ -521,6 +561,10 @@ if $INSTALL_VLESS && $INSTALL_ANYTLS; then
         break
     done
     echo -e "  ${GREEN}VLESS NodeID: ${NODE_ID}  |  AnyTLS NodeID: ${ANYTLS_NODE_ID}${NC}"
+fi
+
+if $INSTALL_VLESS && $INSTALL_HY2; then
+    collect_hysteria2_node_id
 fi
 
 if $INSTALL_ANYTLS; then
@@ -821,7 +865,7 @@ echo -e "  │     证书:     ${GREEN}${CERT_FILE_PATH}${NC}"
 fi
 fi
 if $INSTALL_HY2; then
-echo -e "  │  🟣 Hysteria2: 面板 NodeID ${NODE_ID}，UDP + TLS${NC}"
+echo -e "  │  🟣 Hysteria2: 面板 NodeID $(hy2_panel_id)，UDP + TLS${NC}"
 echo -e "  │     域名:     ${GREEN}${DOMAIN_NAME}${NC}"
 if [[ "$CERT_MODE" == "http" ]]; then
 echo -e "  │     证书:     ${GREEN}HTTP 自动申请 (${CERT_EMAIL})${NC}"
@@ -839,7 +883,16 @@ while true; do
     echo ""
 
     case "$confirm" in
-        Y|y) break ;;
+        Y|y)
+            if $INSTALL_VLESS && $INSTALL_HY2; then
+                if [[ -z "$HY2_NODE_ID" || "$HY2_NODE_ID" == "$NODE_ID" ]]; then
+                    log_warn "Hysteria2 需要一个和 VLESS 不同的节点 ID"
+                    collect_hysteria2_node_id
+                    continue
+                fi
+            fi
+            break
+            ;;
         N|n) echo ""; log_info "已取消安装"; exit 0 ;;
         R|r)
             echo ""
@@ -865,7 +918,7 @@ while true; do
                     echo -e "  ${GREEN}已更新: ${NODE_ID}${NC}"
                     ;;
                 4)
-                    echo -e "  [1] VLESS+REALITY  [2] AnyTLS+TLS  [3] VLESS+AnyTLS 双协议  [4] Hysteria2+TLS"
+                    echo -e "  [1] VLESS+REALITY  [2] AnyTLS+TLS  [3] VLESS+AnyTLS  [4] Hysteria2  [5] VLESS+Hysteria2"
                     echo -e "  ${YELLOW}这里只改协议标记。改到尚未填过证书的协议时，会补问域名和证书。${NC}"
                     read -r -n 1 -p "  → " mode
                     echo ""
@@ -878,6 +931,18 @@ while true; do
                             INSTALL_VLESS=false
                             INSTALL_ANYTLS=false
                             INSTALL_HY2=true
+                            if [[ -z "${CERT_MODE}" ]]; then
+                                collect_hysteria2_tls
+                            fi
+                            ;;
+                        5)
+                            INSTALL_MODE="vless-hysteria2"
+                            INSTALL_VLESS=true
+                            INSTALL_ANYTLS=false
+                            INSTALL_HY2=true
+                            if [[ -z "$HY2_NODE_ID" || "$HY2_NODE_ID" == "$NODE_ID" ]]; then
+                                collect_hysteria2_node_id
+                            fi
                             if [[ -z "${CERT_MODE}" ]]; then
                                 collect_hysteria2_tls
                             fi
@@ -901,7 +966,7 @@ if [[ $EUID -ne 0 ]]; then
     log_error "请使用 root 用户运行此脚本（sudo bash install.sh）"
 fi
 
-# 选项 [4] 会整份重写 config.yml。已经在跑 VLESS / AnyTLS 时直接停止。
+# 选项 [4] 和 [5] 会整份重写 config.yml。已经在跑 VLESS / AnyTLS 时直接停止。
 if $INSTALL_HY2 && [[ -f "$XRAYR_INSTALL_DIR/config.yml" ]]; then
     if grep -E -q 'NodeType:[[:space:]]*(Vless|vless|anytls|Anytls|AnyTLS)' "$XRAYR_INSTALL_DIR/config.yml"; then
         log_error "检测到 ${XRAYR_INSTALL_DIR}/config.yml 里已有 VLESS 或 AnyTLS。安装脚本会覆盖整份配置，已停止。请备份后按 deploy/HYSTERIA2.md 追加 Hysteria2 节点。"
@@ -1185,7 +1250,7 @@ if $INSTALL_HY2; then
     ApiConfig:
       ApiHost: "$V2BOARD_HOST"
       ApiKey: "$V2BOARD_KEY"
-      NodeID: $NODE_ID
+      NodeID: $(hy2_panel_id)
       NodeType: hysteria2
       Timeout: 30
       EnableReality: false
@@ -1627,7 +1692,7 @@ echo -e "  │     Fallback: ${RED}未配置（有指纹风险）${NC}"
 fi
 fi
 if $INSTALL_HY2; then
-echo -e "  │  🟣 Hysteria2: NodeID ${NODE_ID}, UDP, 域名 ${GREEN}${DOMAIN_NAME}${NC}"
+echo -e "  │  🟣 Hysteria2: NodeID $(hy2_panel_id), UDP, 域名 ${GREEN}${DOMAIN_NAME}${NC}"
 echo -e "  │     ALPN:      ${GREEN}h3${NC}    REALITY: ${GREEN}关闭${NC}"
 fi
 echo -e "  │  配置文件:   ${YELLOW}${XRAYR_INSTALL_DIR}/config.yml${NC}"

@@ -132,13 +132,14 @@ Hysteria2 删用户后，新连接会立刻失败。已经建立的 QUIC 会话�
 | `[2]` AnyTLS + TLS | 与原来相同 |
 | `[3]` VLESS + AnyTLS | 与原来相同 |
 | `[4]` Hysteria2 + TLS | 新机器上只写一条 `NodeType: hysteria2` |
+| `[5]` VLESS + Hysteria2 | 新机器上同时写两条。第一个 NodeID 给 VLESS，再单独输入 Hysteria2 的 NodeID |
 
-`[4]` 会询问域名和证书（已有文件，或 HTTP-01），并写入 `EnableReality: false`、`ALPN: ["h3"]`。混淆和 Brutal 保持关闭。
+`[4]` 和 `[5]` 都会询问 Hysteria2 的域名和证书（已有文件，或 HTTP-01），并写入 `EnableReality: false`、`ALPN: ["h3"]`。混淆和 Brutal 保持关闭。`[5]` 里的 VLESS 仍是 REALITY，`CertMode: none`，不使用 Hysteria2 的证书。
 
 两条限制：
 
-- **v0.9.17** 的 Release 含有 Hysteria2，选 `[4]` 会下载它。同目录已有 `./XrayR` 时仍优先用本地文件。**v0.9.16** 没有这个协议，不要用那个二进制。
-- 脚本生成配置时会**整份覆盖** `/etc/XrayR/config.yml`。若文件里已经有 `NodeType: Vless` 或 `anytls`，`[4]` 会直接退出，不替换二进制、不改配置。已经在跑的机器按下一节追加节点，不要重跑安装脚本。
+- **v0.9.17** 的 Release 含有 Hysteria2，选 `[4]` 或 `[5]` 会下载它。同目录已有 `./XrayR` 时仍优先用本地文件。**v0.9.16** 没有这个协议，不要用那个二进制。
+- 脚本生成配置时会**整份覆盖** `/etc/XrayR/config.yml`。若文件里已经有 `NodeType: Vless` 或 `anytls`，`[4]` 和 `[5]` 都会直接退出，不替换二进制、不改配置。已经在跑的机器按下一节追加节点，不要重跑安装脚本。
 
 ## 6. 上线到正在运行的服务器
 

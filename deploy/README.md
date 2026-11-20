@@ -19,11 +19,11 @@ bash <(curl -sSL https://raw.githubusercontent.com/HenZenKuriRIP/XrayR4u/main/de
 1. 面板地址  
 2. API Token  
 3. 节点 ID  
-4. 协议：`[1]` VLESS + REALITY / `[2]` AnyTLS + TLS / `[3]` 双协议 / `[4]` Hysteria2 + TLS
+4. 协议：`[1]` VLESS + REALITY / `[2]` AnyTLS + TLS / `[3]` VLESS + AnyTLS / `[4]` Hysteria2 + TLS / `[5]` VLESS + Hysteria2
 
-`[1]` 到 `[3]` 的配置和以前一样。四个选项都可以下载 Release **v0.9.17**。
+`[1]` 到 `[4]` 的配置和以前一样。五个选项都可以下载 Release **v0.9.17**。
 
-`[4]` 只适合新机器。已经在跑 VLESS 或 AnyTLS 的机器不要选 `[4]`，安装会整份覆盖 `config.yml`，脚本发现旧节点后会退出。追加方式见 [HYSTERIA2.md](HYSTERIA2.md)。Hysteria2 听 UDP，脚本会放行 UDP 443；面板端口不是 443 时要另开。
+`[4]` 和 `[5]` 只适合新机器。`[5]` 同时写入一条 VLESS 和一条 Hysteria2，面板上要先建好两个 NodeID。已经在跑 VLESS 或 AnyTLS 的机器不要选这两项，安装会整份覆盖 `config.yml`，脚本发现旧节点后会退出。追加方式见 [HYSTERIA2.md](HYSTERIA2.md)。Hysteria2 听 UDP，脚本会放行 UDP 443；面板端口不是 443 时要另开。
 
 > 离线：下载 Release 的 `XrayR-linux-amd64` 重命名为 `XrayR`，与 `install.sh` 同目录后执行。不要用 v0.9.16 的 Release 装 Hysteria2。
 
