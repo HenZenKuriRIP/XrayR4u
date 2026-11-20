@@ -5,7 +5,7 @@
 # 源码与本版本 Release 均内嵌 xray-core v26.11.9
 # 协议: VLESS + REALITY / TLS+XHTTP+CDN / AnyTLS + TLS / Hysteria2 + TLS
 # Hysteria2 见 deploy/HYSTERIA2.md。菜单 [1][2][3][4] 的配置不变。
-# [5] 只在新机器上同时写入 VLESS 和 Hysteria2，两条节点各用各的 NodeID。
+# [5] 只在新机器上同时写入 VLESS 和 Hysteria2，两条节点各用各的 NodeID 和 ApiKey。
 # v0.9.16 的 Release 仍是 xray-core v26.7.11，没有 Hysteria2，不要用那个二进制。
 # 密钥生成: XrayR tools {x25519|mldsa65|vlessenc|mlkem768|uuid}
 #
@@ -467,6 +467,40 @@ collect_hysteria2_node_id() {
     echo -e "  ${GREEN}VLESS NodeID: ${NODE_ID}  |  Hysteria2 NodeID: ${HY2_NODE_ID}${NC}"
 }
 
+# [5] 的两条节点各用各的 ApiKey。[4] 继续用一开始输入的那一把。
+collect_hysteria2_api_key() {
+    echo ""
+    echo -e "  ${YELLOW}Hysteria2 使用面板上该节点自己的 API Key，不要和 VLESS 共用同一条节点记录。${NC}"
+    echo ""
+    while true; do
+        echo -e "  ${BOLD}请输入 Hysteria2 节点的 API Key：${NC}"
+        read -r -p "  → " HY2_API_KEY
+        if [[ -z "$HY2_API_KEY" ]]; then
+            log_warn "API Key 不能为空"
+            continue
+        fi
+        if [[ "$HY2_API_KEY" == "$V2BOARD_KEY" ]]; then
+            log_warn "这把 Key 和 VLESS 相同。面板若给每条节点单独发了 Key，请改用 Hysteria2 那把。"
+            echo -e "  ${YELLOW}输入 Y 仍使用这一把，其他任意键重新输入：${NC}"
+            read -r -n 1 -p "  → " confirm
+            echo ""
+            if [[ "$confirm" != "Y" && "$confirm" != "y" ]]; then
+                continue
+            fi
+        fi
+        break
+    done
+    echo -e "  ${GREEN}Hysteria2 API Key 已记录: ${HY2_API_KEY:0:8}****${NC}"
+}
+
+hy2_api_key() {
+    if $INSTALL_VLESS && $INSTALL_HY2 && [[ -n "${HY2_API_KEY:-}" ]]; then
+        printf '%s' "$HY2_API_KEY"
+    else
+        printf '%s' "$V2BOARD_KEY"
+    fi
+}
+
 # [4] 只有 Hysteria2 时用第一个 NodeID。[5] 用单独收集的 HY2_NODE_ID。
 hy2_panel_id() {
     if $INSTALL_VLESS && $INSTALL_HY2; then
@@ -490,7 +524,7 @@ echo -e "  ${GREEN}[3]${NC} VLESS + AnyTLS 双协议 — 同一 VPS 同时运行
 echo -e "  ${GREEN}[4]${NC} Hysteria2 + TLS      — 需要域名和证书，监听 UDP"
 echo -e "  ${GREEN}[5]${NC} VLESS + Hysteria2    — 新机器同时写入两条节点"
 echo -e "      ${YELLOW}已有 VLESS / AnyTLS 时不要选 [4] 或 [5]：本脚本会整份覆盖 config.yml。${NC}"
-echo -e "      ${YELLOW}追加到正在运行的节点请看 deploy/HYSTERIA2.md。${NC}"
+echo -e "      ${YELLOW}正在跑的机器保持现有二进制。新机器才装 Hysteria2，说明见 deploy/HYSTERIA2.md。${NC}"
 echo ""
 
 INSTALL_MODE=""
@@ -539,6 +573,7 @@ KEY_FILE_PATH=""
 ANYTLS_FALLBACK=""
 ANYTLS_NODE_ID=$NODE_ID  # 默认复用主 NodeID
 HY2_NODE_ID=""           # 仅 [5] 使用；[4] 继续用 NODE_ID
+HY2_API_KEY=""           # 仅 [5] 使用；[4] 继续用 V2BOARD_KEY
 
 # 双协议模式：面板上 VLESS 和 AnyTLS 是不同的节点，NodeID 不同
 if $INSTALL_VLESS && $INSTALL_ANYTLS; then
@@ -565,6 +600,7 @@ fi
 
 if $INSTALL_VLESS && $INSTALL_HY2; then
     collect_hysteria2_node_id
+    collect_hysteria2_api_key
 fi
 
 if $INSTALL_ANYTLS; then
@@ -890,6 +926,11 @@ while true; do
                     collect_hysteria2_node_id
                     continue
                 fi
+                if [[ -z "$HY2_API_KEY" ]]; then
+                    log_warn "Hysteria2 需要自己的 API Key"
+                    collect_hysteria2_api_key
+                    continue
+                fi
             fi
             break
             ;;
@@ -943,6 +984,9 @@ while true; do
                             if [[ -z "$HY2_NODE_ID" || "$HY2_NODE_ID" == "$NODE_ID" ]]; then
                                 collect_hysteria2_node_id
                             fi
+                            if [[ -z "$HY2_API_KEY" ]]; then
+                                collect_hysteria2_api_key
+                            fi
                             if [[ -z "${CERT_MODE}" ]]; then
                                 collect_hysteria2_tls
                             fi
@@ -969,7 +1013,7 @@ fi
 # 选项 [4] 和 [5] 会整份重写 config.yml。已经在跑 VLESS / AnyTLS 时直接停止。
 if $INSTALL_HY2 && [[ -f "$XRAYR_INSTALL_DIR/config.yml" ]]; then
     if grep -E -q 'NodeType:[[:space:]]*(Vless|vless|anytls|Anytls|AnyTLS)' "$XRAYR_INSTALL_DIR/config.yml"; then
-        log_error "检测到 ${XRAYR_INSTALL_DIR}/config.yml 里已有 VLESS 或 AnyTLS。安装脚本会覆盖整份配置，已停止。请备份后按 deploy/HYSTERIA2.md 追加 Hysteria2 节点。"
+        log_error "检测到 ${XRAYR_INSTALL_DIR}/config.yml 里已有 VLESS 或 AnyTLS。安装脚本会覆盖整份配置，已停止。正在跑的机器保持现有二进制，不要为了加 Hysteria2 换成 v0.9.17。新机器请看 deploy/HYSTERIA2.md。"
     fi
 fi
 
@@ -1249,7 +1293,7 @@ if $INSTALL_HY2; then
   - PanelType: "V2board"
     ApiConfig:
       ApiHost: "$V2BOARD_HOST"
-      ApiKey: "$V2BOARD_KEY"
+      ApiKey: "$(hy2_api_key)"
       NodeID: $(hy2_panel_id)
       NodeType: hysteria2
       Timeout: 30
@@ -1743,8 +1787,8 @@ fi
 if $INSTALL_HY2; then
 echo -e "  ${YELLOW}💡 Hysteria2 监听 UDP。云安全组请放行面板上的 UDP 端口，不要只放行 TCP。${NC}"
 echo -e "  ${YELLOW}   证书申请若选了 HTTP 验证，另外需要开放 80/TCP。${NC}"
-echo -e "  ${YELLOW}   客户端: hysteria2://<用户UUID>@${DOMAIN_NAME}:<端口>?sni=${DOMAIN_NAME}${NC}"
-echo -e "  ${YELLOW}   面板订阅还不会自动生成这条链接。${NC}"
+echo -e "  ${YELLOW}   客户端: hysteria2://<用户UUID>@${DOMAIN_NAME}:<端口>?sni=${DOMAIN_NAME}&alpn=h3${NC}"
+echo -e "  ${YELLOW}   面板若已下发 hysteria2 订阅，用订阅。否则先用上面这条手工链接。${NC}"
 echo ""
 fi
 

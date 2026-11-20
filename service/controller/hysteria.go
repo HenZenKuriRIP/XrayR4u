@@ -62,6 +62,9 @@ func buildHysteriaStreamSetting(config *Config, nodeInfo *api.NodeInfo) (*conf.S
 	if err := requireHysteriaTLS(config, nodeInfo); err != nil {
 		return nil, err
 	}
+	if err := matchHysteriaCertDomain(config, nodeInfo); err != nil {
+		return nil, err
+	}
 	tlsSettings, err := buildTLSSettings(config)
 	if err != nil {
 		return nil, err
@@ -120,6 +123,22 @@ func requireHysteriaTLS(config *Config, nodeInfo *api.NodeInfo) error {
 		return fmt.Errorf("Hysteria2 requires panel tls=1 and CertConfig")
 	}
 	return nil
+}
+
+// matchHysteriaCertDomain refuses to start when the panel SNI and the local
+// certificate domain are both set and differ. The client verifies the cert
+// against server_name; the inbound would otherwise come up and then fail
+// that check. Empty panel SNI is left to the local CertDomain.
+func matchHysteriaCertDomain(config *Config, nodeInfo *api.NodeInfo) error {
+	if config == nil || config.CertConfig == nil || nodeInfo == nil {
+		return nil
+	}
+	panelName := strings.TrimSpace(nodeInfo.ServerName)
+	certName := strings.TrimSpace(config.CertConfig.CertDomain)
+	if panelName == "" || certName == "" || strings.EqualFold(panelName, certName) {
+		return nil
+	}
+	return fmt.Errorf("Hysteria2 panel server_name %q does not match CertDomain %q", panelName, certName)
 }
 
 // applyHysteriaALPN makes sure the QUIC listener offers h3.
@@ -192,13 +211,11 @@ func buildHysteriaUsers(tag string, userInfo []api.UserInfo) ([]*protocol.User, 
 		if auth == "" {
 			return nil, fmt.Errorf("hysteria2 user uid=%d has an empty uuid", user.UID)
 		}
-		email := user.Email
-		if email == "" {
-			email = auth
-		}
+		// Email stays as the panel sent it, same as buildUserTag. An empty
+		// UniProxy email is already filled with the UUID in ParseUniProxyUserResponse.
 		users = append(users, &protocol.User{
 			Level:   0,
-			Email:   fmt.Sprintf("%s|%s|%d", tag, email, user.UID),
+			Email:   fmt.Sprintf("%s|%s|%d", tag, user.Email, user.UID),
 			Account: serial.ToTypedMessage(&hyaccount.Account{Auth: auth}),
 		})
 	}

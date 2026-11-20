@@ -60,6 +60,9 @@ type NodeInfo struct {
 	ServiceName       string
 	Header            json.RawMessage
 	RealitySettings   json.RawMessage
+	// ServerName is tls_settings.server_name. Hysteria2 compares it with the
+	// local certificate domain. REALITY parsing does not read this field.
+	ServerName string
 	// VlessDecryption is the VLESS inbound "decryption" string from the panel.
 	// Empty means "none". Supports post-quantum VLESS Encryption, e.g.
 	// mlkem768x25519plus.native.0rtt.<keys>... Local ControllerConfig.VlessDecryption

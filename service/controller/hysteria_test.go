@@ -44,7 +44,7 @@ func TestBuildHysteriaUsers_UsesUUIDAndCompositeEmail(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, users, 2)
 	require.Equal(t, "hy2_0.0.0.0_443|a@b.c|7", users[0].Email)
-	require.Equal(t, "hy2_0.0.0.0_443|22222222-2222-2222-2222-222222222222|8", users[1].Email)
+	require.Equal(t, "hy2_0.0.0.0_443||8", users[1].Email)
 
 	mem, err := users[0].ToMemoryUser()
 	require.NoError(t, err)
@@ -97,7 +97,7 @@ func TestInboundBuilder_Hysteria2IgnoresPanelTransport(t *testing.T) {
 func TestInboundBuilder_Hysteria2RejectsRealityAndPlain(t *testing.T) {
 	t.Parallel()
 	cert, key := writeTestCert(t)
-	base := &Config{CertConfig: &CertConfig{CertMode: "file", CertFile: cert, KeyFile: key}}
+	base := &Config{CertConfig: &CertConfig{CertMode: "file", CertDomain: "hy2.example", CertFile: cert, KeyFile: key}}
 
 	_, err := InboundBuilder(base, &api.NodeInfo{
 		NodeType: "hysteria2", Port: 443, EnableTLS: true, TLSType: "reality",
@@ -115,6 +115,13 @@ func TestInboundBuilder_Hysteria2RejectsRealityAndPlain(t *testing.T) {
 		NodeType: "hysteria", Port: 443, EnableTLS: false,
 	}, "t")
 	require.Error(t, err)
+
+	_, err = InboundBuilder(base, &api.NodeInfo{
+		NodeType: "hysteria2", Port: 443, EnableTLS: true, TLSType: "tls", ServerName: "other.example",
+	}, "t")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "server_name")
+	require.Contains(t, err.Error(), "CertDomain")
 }
 
 func TestInboundBuilder_VlessAndAnyTLSStayOnTheirProtocols(t *testing.T) {

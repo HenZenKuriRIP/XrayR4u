@@ -278,9 +278,9 @@ Nodes:
   #         ALICLOUD_SECRET_KEY: "your-secret"
 
   # ========================= 示例 5: Hysteria2 + TLS =========================
-  # 追加一条新节点，不要改已经在跑的 VLESS / AnyTLS 条目。
+  # 新机器上单独写这一条，不要改已经在跑的 VLESS / AnyTLS。已经在跑 v0.9.16 的机器先不要加。
   # 监听 UDP。证书域名必须能被客户端校验。密码是面板用户 UUID。
-  # 详细说明见 deploy/HYSTERIA2.md。面板订阅链接不在这次改动里。
+  # 详细说明见 deploy/HYSTERIA2.md。Hysteria2 听 UDP，端口号可以和 VLESS 的 TCP 相同。
   # - PanelType: "V2board"
   #   ApiConfig:
   #     ApiHost: "https://your-panel.com"

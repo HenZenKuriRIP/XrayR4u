@@ -92,6 +92,27 @@ func TestParseUniProxy_EnableRealityStaysOnVlessOnly(t *testing.T) {
 	require.True(t, info.EnableVision)
 }
 
+func TestParseUniProxy_StoresServerName(t *testing.T) {
+	t.Parallel()
+	raw, err := json.Marshal(map[string]interface{}{
+		"server_port": 443,
+		"network":     "tcp",
+		"tls":         1,
+		"tls_settings": map[string]interface{}{
+			"server_name": "hy2.example.com",
+		},
+	})
+	require.NoError(t, err)
+	j, err := simplejson.NewJson(raw)
+	require.NoError(t, err)
+	c := &APIClient{NodeType: "hysteria2", NodeID: 5}
+	info, err := c.ParseUniProxyNodeResponse(j)
+	require.NoError(t, err)
+	require.Equal(t, "hy2.example.com", info.ServerName)
+	require.Equal(t, "tls", info.TLSType)
+	require.Nil(t, info.RealitySettings)
+}
+
 func TestParseUniProxyNodeResponse_InvalidPort(t *testing.T) {
 	t.Parallel()
 	c := &APIClient{NodeType: "vless", NodeID: 1}

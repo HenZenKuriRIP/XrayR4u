@@ -285,7 +285,7 @@ Body v1（节点默认发送，count 已在本地聚合）：
 | `tls` | 必须是 `1`。`0` 或 `2` 时节点拒绝启动 |
 | `flow` | 省略或空字符串。不要下发 `xtls-rprx-vision` |
 | `decryption` | 不要下发。这不是 VLESS |
-| `tls_settings` | 只留 `server_name`，值为证书域名。不要带 `private_key`、`public_key`、`short_id`、`dest`、`min_client_ver`、`mldsa65_seed` |
+| `tls_settings` | 只留 `server_name`，值为证书域名，必须和节点 `CertDomain` 相同。两边都有值且不一致时，节点拒绝启动。不要带 `private_key`、`public_key`、`short_id`、`dest`、`min_client_ver`、`mldsa65_seed` |
 | `host` / `path` | 不要下发。Hysteria2 不走 XHTTP、WebSocket、gRPC |
 | 用户 | 现有 `/user`。`uuid` 就是 Hysteria2 密码，不用新用户字段 |
 
@@ -450,7 +450,7 @@ Body：`{ "<uid>": ["1.2.3.4", "5.6.7.8"], ... }`
 | TLS + XHTTP + CDN | address=CDN 域名, port, uuid, security=tls, network=xhttp, host, path, sni, alpn, fp；**一般不带 flow** |
 | + VLESS Encryption | 额外 `encryption` = `xray vlessenc` 客户端串（与服务端 decryption 配对） |
 | AnyTLS | 按 AnyTLS 客户端规范；密码=uuid；TLS 域名证书 |
-| Hysteria2 | 见 §8.1。当前 `buildNodeLink`、`clashProxy`、`surgeLine` 没有这个分支，未知类型得到空链接，用户订阅里不会出现该节点 |
+| Hysteria2 | 见 §8.1。参数是 `sni` 和 `alpn=h3`，不要写 `obfs`、`insecure`、`fp`。旁边这份 K2Board 源码的订阅分支还没有 `hysteria2` 时，链接为空 |
 | REALITY + v26.11.9 | `fp` 限 `chrome` / `firefox` / `safari` / `randomized`。Clash 的 `reality-opts` 增加 `support-x25519mlkem768: true` |
 
 服务端 `decryption` 与客户端 `encryption` **成对**，不可混用不同生成结果。
@@ -606,7 +606,7 @@ VLESS / AnyTLS 已经覆盖。Hysteria2 和 v26.11.9 的 REALITY 指纹还要补
 | 升级到 v26.11.9 后 REALITY 拿到真实证书 | 客户端没有 `X25519MLKEM768`。Clash 打开 `support-x25519mlkem768`；`fp` 改为 chrome / firefox / safari / randomized。`min_client_ver` 解决不了这个现象 |
 | Mihomo 报版本过低 | 下发 `min_client_ver: "1.8.0"` 或节点 `RealityMinClientVer` |
 | Hysteria2 节点不起 | `/config` 的 `tls` 必须是 1，且不能带 REALITY 字段；节点要有证书。日志里的 `does not support REALITY` 就是 `tls=2` |
-| 订阅里没有 Hysteria2 | `buildNodeLink` / `clashProxy` / `surgeLine` 还没有 `hysteria2` 分支，未知类型会返回空 |
+| 订阅里没有 Hysteria2 | 面板的 `buildNodeLink` / `clashProxy` / `surgeLine` 还没有 `hysteria2` 分支时，未知类型会返回空。节点不生成这条链接 |
 | Hysteria2 密码错误 | 客户端密码必须是该用户的 UUID，不是节点 ApiKey，也不是混淆密码 |
 | CDN 无流量 | 查 path/host、源站证书、CDN SSL=Full Strict、节点 `Transport/XHTTP` |
 | 开 Encryption 启动失败 | 关闭 Fallback；检查 decryption 串（`xray vlessenc`） |

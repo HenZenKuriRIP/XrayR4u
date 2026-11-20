@@ -744,6 +744,7 @@ func nodeInfoEqual(a, b *api.NodeInfo) bool {
 		a.EnableVless == b.EnableVless &&
 		a.CypherMethod == b.CypherMethod &&
 		a.ServiceName == b.ServiceName &&
+		a.ServerName == b.ServerName &&
 		a.VlessDecryption == b.VlessDecryption &&
 		bytes.Equal(a.Header, b.Header) &&
 		bytes.Equal(a.RealitySettings, b.RealitySettings)

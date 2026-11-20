@@ -51,7 +51,7 @@ XrayR4u 是 [XrayR](https://github.com/XrayR-project/XrayR) 的社区维护分�
 
 v0.9.17 的发布二进制就是这颗核心，并带 Hysteria2。v0.9.16 仍是 xray-core v26.7.11，不能用来跑 Hysteria2。
 
-升级正在运行的 REALITY 节点前，客户端指纹只用 `chrome`、`firefox`、`safari`、`randomized`。Clash 的 `reality-opts` 要有 `support-x25519mlkem768: true`。`edge`、`ios`、`qq`、`random` 会被 v26.11.9 拒绝。`min_client_ver` 继续用 `1.8.0`，它不管这道密钥交换。Hysteria2 不走 REALITY。
+已经在跑 VLESS REALITY 的机器先留在 v0.9.16。当前面板订阅还没有 `support-x25519mlkem768`，直接换成 v0.9.17 会把原来的 VLESS 断开。等订阅带上这个字段，并且指纹只用 `chrome`、`firefox`、`safari`、`randomized` 之后再升级。`edge`、`ios`、`qq`、`random` 会被 v26.11.9 拒绝。`min_client_ver` 继续用 `1.8.0`，它不管这道密钥交换。Hysteria2 不走 REALITY。
 
 ## 密钥 / 后量子材料生成（节点自带）
 
@@ -75,7 +75,7 @@ XrayR tools help
 bash <(curl -sSL https://raw.githubusercontent.com/HenZenKuriRIP/XrayR4u/main/deploy/install.sh)
 ```
 
-交互输入面板地址、Token、节点 ID，选择协议后自动安装。`[1]` VLESS、`[2]` AnyTLS、`[3]` VLESS + AnyTLS、`[4]` Hysteria2 与原来相同。`[5]` 在新机器上同时写入 VLESS 和 Hysteria2，两条节点使用不同的面板 NodeID。`[4]` 和 `[5]` 都会下载本版本的 Release。Hysteria2 监听面板端口上的 UDP。已经在跑 VLESS 或 AnyTLS 的机器不要重跑脚本，脚本会整份覆盖 `config.yml`。追加方式见 [deploy/HYSTERIA2.md](deploy/HYSTERIA2.md)。
+交互输入面板地址、Token、节点 ID，选择协议后自动安装。`[1]` VLESS、`[2]` AnyTLS、`[3]` VLESS + AnyTLS、`[4]` Hysteria2 与原来相同。`[5]` 在新机器上同时写入 VLESS 和 Hysteria2，两条节点使用不同的面板 NodeID 和 ApiKey。`[4]` 和 `[5]` 都会下载本版本的 Release。Hysteria2 监听 UDP，端口号可以和 VLESS 的 TCP 相同。已经在跑 VLESS 或 AnyTLS 的机器不要重跑脚本，脚本会整份覆盖 `config.yml`。说明见 [deploy/HYSTERIA2.md](deploy/HYSTERIA2.md)。
 
 ### 可选：WARP 解锁 AI / 流媒体
 

@@ -793,6 +793,7 @@ func (c *APIClient) ParseUniProxyNodeResponse(response *simplejson.Json) (*api.N
 	nodeInfo := &api.NodeInfo{
 		NodeType:          c.NodeType,
 		NodeID:            c.NodeID,
+		ServerName:        strings.TrimSpace(response.Get("tls_settings").Get("server_name").MustString()),
 		Port:              port,
 		TransportProtocol: network,
 		EnableTLS:         enableTLS,

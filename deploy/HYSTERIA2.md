@@ -2,7 +2,7 @@
 
 本文说明 XrayR4u 如何在**不改 UniProxy 接口、不改 VLESS / AnyTLS 行为**的前提下接入 Hysteria2，以及怎样加到已经在跑的节点上。
 
-面板订阅链接（`hysteria2://...`、Clash `type: hysteria2`）不在这次改动里。节点能同步用户并对外提供协议；客户端链接需要以后在 K2Board 订阅里另加，或先手工下发。
+节点能同步用户并对外提供协议。订阅链接由面板生成；旁边这份 K2Board 源码的 `subscribe_svc.go` 还没有 `hysteria2` 分支时，客户端仍要用手工链接。链接参数是 `sni` 和 `alpn=h3`，不要加 `obfs`、`insecure`、`fp`。
 
 ## 1. 结论
 
@@ -25,7 +25,7 @@
 密码就是用户 UUID。标准客户端 URI：
 
 ```text
-hysteria2://<uuid>@<host>:<port>?sni=<证书域名>
+hysteria2://<uuid>@<host>:<port>?sni=<证书域名>&alpn=h3
 ```
 
 ## 2. 为什么不会破坏已有 VLESS 和 AnyTLS
@@ -45,7 +45,7 @@ hysteria2://<uuid>@<host>:<port>?sni=<证书域名>
 3. **`EnableReality: true` 不再套到 Hysteria2 和 AnyTLS。** 这个开关以前就会跳过 AnyTLS。现在同样跳过 Hysteria2。`NodeType: Vless` 且 `EnableReality: true` 时，仍然把 `tls=1` 提升成 REALITY，和改前一致。
 4. **用户键不变。** 邮箱仍是 `tag|email|uid`。限速、在线 IP、流量计数、审计踢线沿用现有 `mydispatcher`。Hysteria2 没有走 AnyTLS 那条 `UpdateUsers` 全量替换。
 5. **新配置块默认不生效。** `ControllerConfig.Hysteria2` 只在 Hysteria2 入站里读取。VLESS / AnyTLS 节点不写这个块，行为与现在相同。
-6. **已有节点配置不用改。** 不把正在服务的节点 `NodeType` 改成 `hysteria2`。新协议用**新的** `Nodes[]` 条目、**新的端口**、**自己的证书域名**。
+6. **已有节点配置不用改。** 不把正在服务的节点 `NodeType` 改成 `hysteria2`。新协议用**新的** `Nodes[]` 条目和**自己的证书域名**。Hysteria2 听 UDP，端口号可以和 VLESS 的 TCP 相同，只要不和别的 UDP 服务抢这个端口。
 
 Hysteria2 删用户后，新连接会立刻失败。已经建立的 QUIC 会话要等到空闲超时才断开。这和「只从认证表删除」一致，不会去动 VLESS / AnyTLS 的连接。
 
@@ -89,7 +89,7 @@ Hysteria2 删用户后，新连接会立刻失败。已经建立的 QUIC 会话�
 
 ## 5. 节点配置示例
 
-在现有 `Nodes` 列表**追加**一项，不要改已经在服务的条目。端口不要和 VLESS、AnyTLS 或本机其他 UDP 服务重合。Hysteria2 听的是 UDP。
+新机器的 `Nodes` 里单独写这一项，不要改已经在服务的 VLESS / AnyTLS。已经在跑 v0.9.16 的机器先不要加，原因见第 6 节。Hysteria2 听 UDP，端口号可以和 VLESS 的 TCP 相同。不要和别的 UDP 服务抢同一个端口。
 
 ```yaml
   - PanelType: "V2board"
@@ -118,9 +118,9 @@ Hysteria2 删用户后，新连接会立刻失败。已经建立的 QUIC 会话�
       #   Down: ""
 ```
 
-面板侧这条节点保持现有记录即可：`node_type` 写成 `hysteria2`（后台这个字段是普通字符串），`tls=1`，端口与 SNI 填证书域名。不需要新的 UniProxy 字段。管理页下拉框目前没有 Hysteria2 模板，可以用现有创建接口写入 `node_type`，或等面板表单后续再加。
+面板侧这条节点：`node_type` 写成 `hysteria2`，`tls=1`，`sni` 填证书域名。节点会把 `/config` 的 `tls_settings.server_name` 和本机 `CertDomain` 比较，两个都有值且不一致就拒绝启动。不需要新的 UniProxy 字段。
 
-防火墙放行该 UDP 端口。证书域名必须能被客户端校验。
+防火墙放行该 UDP 端口。端口号可以和 VLESS 的 TCP 相同。
 
 ### 5.1 安装脚本
 
@@ -132,26 +132,28 @@ Hysteria2 删用户后，新连接会立刻失败。已经建立的 QUIC 会话�
 | `[2]` AnyTLS + TLS | 与原来相同 |
 | `[3]` VLESS + AnyTLS | 与原来相同 |
 | `[4]` Hysteria2 + TLS | 新机器上只写一条 `NodeType: hysteria2` |
-| `[5]` VLESS + Hysteria2 | 新机器上同时写两条。第一个 NodeID 给 VLESS，再单独输入 Hysteria2 的 NodeID |
+| `[5]` VLESS + Hysteria2 | 新机器上同时写两条。再单独输入 Hysteria2 的 NodeID 和 ApiKey |
 
 `[4]` 和 `[5]` 都会询问 Hysteria2 的域名和证书（已有文件，或 HTTP-01），并写入 `EnableReality: false`、`ALPN: ["h3"]`。混淆和 Brutal 保持关闭。`[5]` 里的 VLESS 仍是 REALITY，`CertMode: none`，不使用 Hysteria2 的证书。
 
 两条限制：
 
 - **v0.9.17** 的 Release 含有 Hysteria2，选 `[4]` 或 `[5]` 会下载它。同目录已有 `./XrayR` 时仍优先用本地文件。**v0.9.16** 没有这个协议，不要用那个二进制。
-- 脚本生成配置时会**整份覆盖** `/etc/XrayR/config.yml`。若文件里已经有 `NodeType: Vless` 或 `anytls`，`[4]` 和 `[5]` 都会直接退出，不替换二进制、不改配置。已经在跑的机器按下一节追加节点，不要重跑安装脚本。
+- 脚本生成配置时会**整份覆盖** `/etc/XrayR/config.yml`。若文件里已经有 `NodeType: Vless` 或 `anytls`，`[4]` 和 `[5]` 都会直接退出，不替换二进制、不改配置。已经在跑 VLESS 的机器先保持 v0.9.16，不要为了追加 Hysteria2 换二进制。
 
-## 6. 上线到正在运行的服务器
+## 6. 上线
 
-1. 在测试机编译，确认下面的测试通过。
-2. 备份服务器上的 `/etc/XrayR/config.yml` 和当前二进制。不要对这台机器重跑 `install.sh`。
-3. 替换二进制。**先不要改配置**，重启一次。原有 VLESS / AnyTLS 节点应照常拉用户、报流量。此时期望日志里没有 Hysteria2 入站。
-4. 确认旧节点正常后，再追加第 5 节的新节点并重启（或等配置热重载）。
-5. 看日志出现 `[hysteria2: <id>] Start monitor node status`，以及添加用户的条数。
-6. 用一条测试 UUID 从客户端连 `hysteria2://<uuid>@域名:端口?sni=域名`。错误密码应失败。
-7. 再检查旧节点的在线人数和流量仍在上报。
+已经在跑 VLESS 的机器保持 **v0.9.16**。不要把那台机器的二进制换成 v0.9.17：v26.11.9 的 REALITY 会拒绝没有 `X25519MLKEM768` 的客户端，也会拒绝 `edge`、`ios`、`qq`、`random` 指纹。当前面板订阅还没有 `support-x25519mlkem768`，也没有改写指纹。同一进程换核心后，原来的 VLESS 会先断，Hysteria2 还没加上。
 
-热重载会按现有逻辑重建**有变化**的节点。只追加新 `Nodes[]` 时，旧节点的入站标签不变，不会因为这次代码被拆掉重来；重启进程则会全部重新监听，这是现有行为，与协议无关。重启窗口要选在可接受的时间。
+等面板单独打开混合密钥和指纹限制之后，再升级旧机器的二进制。在那之前，新机器用安装菜单 `[5]`：两条 `Nodes`、两个面板节点 ID、两把 `ApiKey`。`install.sh` 发现已有 VLESS 或 AnyTLS 就退出，这个行为要保留。
+
+新机器装好后：
+
+1. 看日志出现 `[hysteria2: <id>] Start monitor node status`，以及添加用户的条数。
+2. 用面板订阅，或一条测试链接 `hysteria2://<uuid>@域名:端口?sni=域名&alpn=h3`。错误密码应失败。
+3. VLESS 和 Hysteria2 的流量、在线各自上报到自己的节点 ID。
+
+热重载会按现有逻辑重建**有变化**的节点。以后只在配置里增加新的 `Nodes[]` 时，旧节点的入站标签不变；重启进程则会全部重新监听。正在跑 v0.9.16 的机器现在不要加这项，见本节开头。
 
 ## 7. 回滚
 
@@ -180,8 +182,7 @@ go test -count=1 -timeout 180s ./service/controller/ ./api/v2board/ \
 
 ## 9. 这次故意没做
 
-- 不改 UniProxy 路径和 JSON。
-- 不在 K2Board 订阅里生成 Hysteria2 链接。
-- 不把混淆、Brutal、伪装写进面板数据库。
+- 不改 UniProxy 路径和 JSON。订阅链接由面板生成；节点不负责拼 `hysteria2://`。
+- 不把混淆、Brutal、伪装写进面板数据库。对接时这三项保持关闭。
 - 不做 UDP 端口跳跃。
 - 不改 VLESS 默认 ALPN、Vision、REALITY 或 AnyTLS Fallback。
