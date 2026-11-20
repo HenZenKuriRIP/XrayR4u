@@ -118,7 +118,7 @@ Hysteria2 删用户后，新连接会立刻失败。已经建立的 QUIC 会话�
       #   Down: ""
 ```
 
-面板侧这条节点：`node_type` 写成 `hysteria2`，`tls=1`，`sni` 填证书域名。节点会把 `/config` 的 `tls_settings.server_name` 和本机 `CertDomain` 比较，两个都有值且不一致就拒绝启动。不需要新的 UniProxy 字段。
+面板侧这条节点：`node_type` 写成 `hysteria2`，`tls=1`，`sni` 填证书域名。v0.9.18 起，节点会把 `/config` 的 `tls_settings.server_name` 和本机 `CertDomain` 比较，两个都有值且不一致就拒绝启动。v0.9.17 的二进制没有这道检查。不需要新的 UniProxy 字段。
 
 防火墙放行该 UDP 端口。端口号可以和 VLESS 的 TCP 相同。
 
@@ -138,12 +138,12 @@ Hysteria2 删用户后，新连接会立刻失败。已经建立的 QUIC 会话�
 
 两条限制：
 
-- **v0.9.17** 的 Release 含有 Hysteria2，选 `[4]` 或 `[5]` 会下载它。同目录已有 `./XrayR` 时仍优先用本地文件。**v0.9.16** 没有这个协议，不要用那个二进制。
+- **v0.9.18** 的 Release 含有 Hysteria2，选 `[4]` 或 `[5]` 会下载它。同目录已有 `./XrayR` 时仍优先用本地文件。**v0.9.16** 没有这个协议，不要用那个二进制。
 - 脚本生成配置时会**整份覆盖** `/etc/XrayR/config.yml`。若文件里已经有 `NodeType: Vless` 或 `anytls`，`[4]` 和 `[5]` 都会直接退出，不替换二进制、不改配置。已经在跑 VLESS 的机器先保持 v0.9.16，不要为了追加 Hysteria2 换二进制。
 
 ## 6. 上线
 
-已经在跑 VLESS 的机器保持 **v0.9.16**。不要把那台机器的二进制换成 v0.9.17：v26.11.9 的 REALITY 会拒绝没有 `X25519MLKEM768` 的客户端，也会拒绝 `edge`、`ios`、`qq`、`random` 指纹。当前面板订阅还没有 `support-x25519mlkem768`，也没有改写指纹。同一进程换核心后，原来的 VLESS 会先断，Hysteria2 还没加上。
+已经在跑 VLESS 的机器保持 **v0.9.16**。不要把那台机器的二进制换成 v0.9.18：v26.11.9 的 REALITY 会拒绝没有 `X25519MLKEM768` 的客户端，也会拒绝 `edge`、`ios`、`qq`、`random` 指纹。当前面板订阅还没有 `support-x25519mlkem768`，也没有改写指纹。同一进程换核心后，原来的 VLESS 会先断，Hysteria2 还没加上。
 
 等面板单独打开混合密钥和指纹限制之后，再升级旧机器的二进制。在那之前，新机器用安装菜单 `[5]`：两条 `Nodes`、两个面板节点 ID、两把 `ApiKey`。`install.sh` 发现已有 VLESS 或 AnyTLS 就退出，这个行为要保留。
 

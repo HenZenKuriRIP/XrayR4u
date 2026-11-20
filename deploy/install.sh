@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# XrayR v0.9.17 VPS 一键部署脚本
+# XrayR v0.9.18 VPS 一键部署脚本
 # 支持: Debian 12/13, Ubuntu 20.04+/22.04+/24.04+
 # 源码与本版本 Release 均内嵌 xray-core v26.11.9
 # 协议: VLESS + REALITY / TLS+XHTTP+CDN / AnyTLS + TLS / Hysteria2 + TLS
@@ -36,8 +36,8 @@ XRAYR_BIN_DIR="/usr/local/bin"
 XRAYR_BIN_NAME="XrayR"
 XRAYR_SERVICE="/etc/systemd/system/xrayr.service"
 XRAYR_REPO="HenZenKuriRIP/XrayR4u"
-XRAYR_VERSION="v0.9.17"
-# v0.9.17 的 Release 已含 Hysteria2。为 false 时，选项 [4] 可以下载该 Release。
+XRAYR_VERSION="v0.9.18"
+# v0.9.18 的 Release 已含 Hysteria2，并会核对面板 server_name 与 CertDomain。为 false 时，选项 [4] 可以下载该 Release。
 # 同目录若已有 ./XrayR，脚本仍优先使用本地文件。
 HYSTERIA2_NEEDS_LOCAL_BINARY=false
 
@@ -203,7 +203,7 @@ clear
 echo ""
 echo -e "${CYAN}╔═══════════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║                                                   ║${NC}"
-echo -e "${CYAN}║        ${BOLD}XrayR v0.9.17 — VPS 一键部署脚本${NC}${CYAN}             ║${NC}"
+echo -e "${CYAN}║        ${BOLD}XrayR v0.9.18 — VPS 一键部署脚本${NC}${CYAN}             ║${NC}"
 echo -e "${CYAN}║   VLESS+REALITY / TLS+XHTTP+CDN / AnyTLS+TLS      ║${NC}"
 echo -e "${CYAN}║        适配 K2Board (UniProxy) 面板                 ║${NC}"
 echo -e "${CYAN}║                                                   ║${NC}"
@@ -1013,7 +1013,7 @@ fi
 # 选项 [4] 和 [5] 会整份重写 config.yml。已经在跑 VLESS / AnyTLS 时直接停止。
 if $INSTALL_HY2 && [[ -f "$XRAYR_INSTALL_DIR/config.yml" ]]; then
     if grep -E -q 'NodeType:[[:space:]]*(Vless|vless|anytls|Anytls|AnyTLS)' "$XRAYR_INSTALL_DIR/config.yml"; then
-        log_error "检测到 ${XRAYR_INSTALL_DIR}/config.yml 里已有 VLESS 或 AnyTLS。安装脚本会覆盖整份配置，已停止。正在跑的机器保持现有二进制，不要为了加 Hysteria2 换成 v0.9.17。新机器请看 deploy/HYSTERIA2.md。"
+        log_error "检测到 ${XRAYR_INSTALL_DIR}/config.yml 里已有 VLESS 或 AnyTLS。安装脚本会覆盖整份配置，已停止。正在跑的机器保持现有二进制，不要为了加 Hysteria2 换成 v0.9.18。新机器请看 deploy/HYSTERIA2.md。"
     fi
 fi
 
@@ -1180,7 +1180,7 @@ pause 1
 cat > "$XRAYR_INSTALL_DIR/config.yml" << YML
 # ============================================================================
 # XrayR 配置文件 — 安装模式: ${INSTALL_MODE}
-# 内置 xray-core v26.11.9 | XrayR4u v0.9.17
+# 内置 xray-core v26.11.9 | XrayR4u v0.9.18
 # ============================================================================
 Log:
   Level: warning

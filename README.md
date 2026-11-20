@@ -3,7 +3,7 @@
 [![Go Version](https://img.shields.io/badge/Go-1.27+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-MPL%202.0-blue.svg)](LICENSE)
 [![Xray-core](https://img.shields.io/badge/Xray--core-v26.11.9-red.svg)](https://github.com/XTLS/Xray-core)
-[![Release](https://img.shields.io/badge/release-v0.9.17-brightgreen.svg)](https://github.com/HenZenKuriRIP/XrayR4u/releases)
+[![Release](https://img.shields.io/badge/release-v0.9.18-brightgreen.svg)](https://github.com/HenZenKuriRIP/XrayR4u/releases)
 
 XrayR4u 是 [XrayR](https://github.com/XrayR-project/XrayR) 的社区维护分支：Go 语言后端代理管理框架，作为 **K2Board 面板** 与 **Xray-core** 之间的桥梁。
 
@@ -45,13 +45,13 @@ XrayR4u 是 [XrayR](https://github.com/XrayR-project/XrayR) 的社区维护分�
 
 | 项目 | 版本 |
 |------|------|
-| XrayR4u | **v0.9.17** |
+| XrayR4u | **v0.9.18** |
 | Xray-core | **v26.11.9** |
 | Go | 1.27+ |
 
-v0.9.17 的发布二进制就是这颗核心，并带 Hysteria2。v0.9.16 仍是 xray-core v26.7.11，不能用来跑 Hysteria2。
+v0.9.18 是当前发布，内嵌这颗核心，并带 Hysteria2。面板 `server_name` 和本机 `CertDomain` 都有值且不一致时，Hysteria2 拒绝启动。v0.9.17 有 Hysteria2，但没有这道检查。v0.9.16 仍是 xray-core v26.7.11，不能用来跑 Hysteria2。
 
-已经在跑 VLESS REALITY 的机器先留在 v0.9.16。当前面板订阅还没有 `support-x25519mlkem768`，直接换成 v0.9.17 会把原来的 VLESS 断开。等订阅带上这个字段，并且指纹只用 `chrome`、`firefox`、`safari`、`randomized` 之后再升级。`edge`、`ios`、`qq`、`random` 会被 v26.11.9 拒绝。`min_client_ver` 继续用 `1.8.0`，它不管这道密钥交换。Hysteria2 不走 REALITY。
+已经在跑 VLESS REALITY 的机器先留在 v0.9.16。当前面板订阅还没有 `support-x25519mlkem768`，直接换成 v0.9.18 会把原来的 VLESS 断开。等订阅带上这个字段，并且指纹只用 `chrome`、`firefox`、`safari`、`randomized` 之后再升级。`edge`、`ios`、`qq`、`random` 会被 v26.11.9 拒绝。`min_client_ver` 继续用 `1.8.0`，它不管这道密钥交换。Hysteria2 不走 REALITY。
 
 ## 密钥 / 后量子材料生成（节点自带）
 
@@ -91,7 +91,7 @@ bash <(curl -sSL https://raw.githubusercontent.com/HenZenKuriRIP/XrayR4u/main/de
 
 ```bash
 # 示例：linux amd64
-curl -sSL -o XrayR https://github.com/HenZenKuriRIP/XrayR4u/releases/download/v0.9.17/XrayR-linux-amd64
+curl -sSL -o XrayR https://github.com/HenZenKuriRIP/XrayR4u/releases/download/v0.9.18/XrayR-linux-amd64
 chmod +x XrayR
 # 与 install.sh 同目录后执行 bash install.sh（脚本优先用本地二进制）
 ```
