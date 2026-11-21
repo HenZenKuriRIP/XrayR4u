@@ -11,7 +11,6 @@ import (
 
 	"github.com/HenZenKuriRIP/XrayR4u/api"
 	"github.com/HenZenKuriRIP/XrayR4u/app/mydispatcher"
-	"github.com/HenZenKuriRIP/XrayR4u/common/legocmd"
 	"github.com/HenZenKuriRIP/XrayR4u/common/serverstatus"
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/core"
@@ -40,6 +39,12 @@ type Controller struct {
 	panelType  string
 	clientInfo api.ClientInfo
 
+	// startMu serializes startOnce and Close. closeCtx is created at the
+	// beginning of Start so a failed first fetch can still be cancelled.
+	// It is not replaced on retry.
+	startMu sync.Mutex
+	started bool
+
 	// ---- mutable state: all reads/writes must be done under mu ----
 	// mu guards state and userList.
 	mu       sync.RWMutex
@@ -53,6 +58,14 @@ type Controller struct {
 
 	nodeInfoMonitorPeriodic *task.Periodic
 	userReportPeriodic      *task.Periodic
+
+	renewMu      sync.Mutex
+	renewRunning bool
+	lastRenew    time.Time
+
+	dnsMu        sync.Mutex
+	lastDNSCheck time.Time
+	lastDNSWarn  string
 }
 
 // New return a Controller service with default parameters.
@@ -98,36 +111,76 @@ func (c *Controller) setUserList(list []api.UserInfo) {
 
 // -------------------------------------------------------------------------
 
-// Start implement the Start() function of the service interface
+// Start implement the Start() function of the service interface.
+// A failed first fetch does not fail the process. This node retries on its
+// own interval; a sibling that already started keeps serving.
 func (c *Controller) Start() error {
 	c.clientInfo = c.apiClient.Describe()
+	c.ensureCloseCtx()
+	if err := c.startOnce(); err != nil {
+		if c.closeCtx.Err() != nil {
+			return err
+		}
+		c.logStartFailure(err)
+		go c.retryUntilStarted()
+		return nil
+	}
+	return nil
+}
 
-	// First fetch Node Info
+func (c *Controller) ensureCloseCtx() {
+	c.startMu.Lock()
+	defer c.startMu.Unlock()
+	if c.closeCancel == nil {
+		c.closeCtx, c.closeCancel = context.WithCancel(context.Background())
+	}
+}
+
+// startOnce builds the inbound and starts the periodic tasks.
+// It is safe to call again after a failure: a failed GetNodeInfo creates
+// nothing, and a failed GetUserList rolls the inbound back. A successful
+// call runs the periodic tasks only once.
+func (c *Controller) startOnce() error {
+	c.startMu.Lock()
+	defer c.startMu.Unlock()
+	if c.started {
+		return nil
+	}
+	if c.closeCtx.Err() != nil {
+		return c.closeCtx.Err()
+	}
+
 	newNodeInfo, err := c.apiClient.GetNodeInfo()
 	if err != nil {
 		return err
 	}
+	if c.closeCtx.Err() != nil {
+		return c.closeCtx.Err()
+	}
 
-	// Bootstrap state before starting any goroutines – no lock needed yet.
-	c.closeCtx, c.closeCancel = context.WithCancel(context.Background())
 	tag := buildNodeTag(newNodeInfo, c.config.ListenIP)
 	c.state = nodeState{nodeInfo: newNodeInfo, tag: tag}
 
 	// rollbackInbound tears down a partially-started controller so a failed
-	// Start() never leaves orphan inbound/outbound/limiter/rule entries.
+	// attempt never leaves orphan inbound/outbound/limiter/rule entries.
 	rollbackInbound := func() {
 		_ = c.removeOldTag(tag)
 		_ = c.DeleteInboundLimiter(tag)
 		c.DeleteRule(tag)
+		c.state = nodeState{}
+		c.userList = nil
 	}
 
-	// Add new tag
 	if err = c.addNewTag(newNodeInfo); err != nil {
 		log.Printf("[%s: %d] FATAL: Failed to add inbound tag: %s", c.clientInfo.NodeType, c.clientInfo.NodeID, err)
+		c.state = nodeState{}
 		return err
 	}
+	if c.closeCtx.Err() != nil {
+		rollbackInbound()
+		return c.closeCtx.Err()
+	}
 
-	// Update user
 	userInfo, err := c.apiClient.GetUserList()
 	if err != nil {
 		rollbackInbound()
@@ -139,7 +192,6 @@ func (c *Controller) Start() error {
 	}
 	c.userList = *userInfo
 
-	// Add Limiter
 	if err := c.AddInboundLimiter(tag, newNodeInfo.SpeedLimit, userInfo); err != nil {
 		log.Print(err)
 	}
@@ -153,6 +205,11 @@ func (c *Controller) Start() error {
 		}
 	}
 
+	if c.closeCtx.Err() != nil {
+		rollbackInbound()
+		return c.closeCtx.Err()
+	}
+
 	c.nodeInfoMonitorPeriodic = &task.Periodic{
 		Interval: time.Duration(c.config.UpdatePeriodic) * time.Second,
 		Execute:  c.nodeInfoMonitor,
@@ -161,6 +218,7 @@ func (c *Controller) Start() error {
 		Interval: time.Duration(c.config.UpdatePeriodic) * time.Second,
 		Execute:  c.userInfoMonitor,
 	}
+	c.started = true
 
 	log.Printf("[%s: %d] Start monitor node status", newNodeInfo.NodeType, newNodeInfo.NodeID)
 	go func() {
@@ -173,16 +231,19 @@ func (c *Controller) Start() error {
 		time.Sleep(time.Duration(c.config.UpdatePeriodic) * time.Second)
 		_ = c.userReportPeriodic.Start()
 	}()
+	go c.maybeWarnHysteriaDomain(newNodeInfo)
 	return nil
 }
 
 // Close implement the Close() function of the service interface
 func (c *Controller) Close() error {
 	// Cancel the close context first so any in-flight Execute goroutines
-	// on the periodic tasks see the cancellation and bail out early.
+	// and the start retry see the cancellation and bail out early.
 	if c.closeCancel != nil {
 		c.closeCancel()
 	}
+	c.startMu.Lock()
+	defer c.startMu.Unlock()
 
 	// Clean up limiter and rule-manager entries for this tag.
 	// Without this, sync.Map entries accumulate across hot-reloads.
@@ -209,15 +270,22 @@ func (c *Controller) nodeInfoMonitor() error {
 		return nil
 	}
 
+	// Hourly Hysteria2 DNS warning. Run before the panel fetch so a 429 does
+	// not hide a bad certificate domain. A bad name does not remove the inbound.
+	if saved := c.getState(); saved.nodeInfo != nil {
+		c.maybeWarnHysteriaDomain(saved.nodeInfo)
+	}
+
 	// Fetch remote data outside the lock – these are pure network calls.
+	// A failed user list keeps the users already loaded.
 	newNodeInfo, err := c.apiClient.GetNodeInfo()
 	if err != nil {
-		log.Print(err)
+		c.logFetchFailure("GetNodeInfo", err)
 		return nil
 	}
 	newUserInfo, err := c.apiClient.GetUserList()
 	if err != nil {
-		log.Print(err)
+		c.logFetchFailure("GetUserList", err)
 		return nil
 	}
 
@@ -244,26 +312,12 @@ func (c *Controller) nodeInfoMonitor() error {
 		}
 	}
 
-	// Check Cert – fire asynchronously so heavy network I/O cannot block this ticker.
+	// Check Cert. Skip while the certificate is more than 30 days from expiry,
+	// and never start a second lego while one is already running.
 	if c.getState().nodeInfo.EnableTLS &&
+		c.config.CertConfig != nil &&
 		(c.config.CertConfig.CertMode == "dns" || c.config.CertConfig.CertMode == "http") {
-		go func() {
-			lego, err := legocmd.New()
-			if err != nil {
-				log.Print(err)
-				return
-			}
-			// xray-core supports OcspStapling hot renew.
-			if _, _, err = lego.RenewCert(
-				c.config.CertConfig.CertDomain,
-				c.config.CertConfig.Email,
-				c.config.CertConfig.CertMode,
-				c.config.CertConfig.Provider,
-				c.config.CertConfig.DNSEnv,
-			); err != nil {
-				log.Print(err)
-			}
-		}()
+		c.maybeRenewCert()
 	}
 
 	if !nodeInfoChanged {

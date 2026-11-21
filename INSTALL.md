@@ -41,7 +41,7 @@ bash <(curl -sSL https://raw.githubusercontent.com/HenZenKuriRIP/XrayR4u/main/de
 4. Hysteria2 + TLS
 5. VLESS + Hysteria2（新机器，两条节点）
 
-五个选项都使用 Release **v0.9.18**（内嵌 xray-core v26.11.9，含 Hysteria2）。选完协议后，每条节点单独输入自己的 API Key。`[3]` 分别问 VLESS 和 AnyTLS，`[5]` 分别问 VLESS 和 Hysteria2 的 NodeID 与 API Key。已经在跑 VLESS 或 AnyTLS 时不要选 `[4]` 或 `[5]`：脚本会覆盖整份 `/etc/XrayR/config.yml`，发现旧节点后会退出。已经在跑 VLESS 的机器保持 v0.9.16，等面板订阅带上 `support-x25519mlkem768` 再换二进制。说明见 [deploy/HYSTERIA2.md](deploy/HYSTERIA2.md)。
+五个选项都使用 Release **v0.9.19**（内嵌 xray-core v26.11.9，含 Hysteria2）。选完协议后，每条节点单独输入自己的 API Key。`[3]` 分别问 VLESS 和 AnyTLS，`[5]` 分别问 VLESS 和 Hysteria2 的 NodeID 与 API Key。脚本会读取面板 `server_port` 再放行防火墙；读失败时询问端口，不会改用 443。Hysteria2 还会在申请证书之前检查域名是否解析到本机。已经在跑 VLESS、AnyTLS 或 Hysteria2 时不要选 `[4]` 或 `[5]`：脚本会覆盖整份 `/etc/XrayR/config.yml`，发现旧节点后会退出。已经在跑 VLESS 的机器保持 v0.9.16，等面板订阅带上 `support-x25519mlkem768` 再换二进制。说明见 [deploy/HYSTERIA2.md](deploy/HYSTERIA2.md)。
 
 ---
 
@@ -266,6 +266,7 @@ Nodes:
       NodeType: Vless
     ControllerConfig:
       ListenIP: 0.0.0.0
+      SendIP: 0.0.0.0
       UpdatePeriodic: 60
       CertConfig:
         CertMode: none
@@ -285,6 +286,7 @@ Nodes:
       NodeType: Vless
     ControllerConfig:
       ListenIP: 0.0.0.0
+      SendIP: 0.0.0.0
       UpdatePeriodic: 60
       CertConfig:
         CertMode: file

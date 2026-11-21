@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# XrayR v0.9.18 VPS 一键部署脚本
+# XrayR v0.9.19 VPS 一键部署脚本
 # 支持: Debian 12/13, Ubuntu 20.04+/22.04+/24.04+
 # 源码与本版本 Release 均内嵌 xray-core v26.11.9
 # 协议: VLESS + REALITY / TLS+XHTTP+CDN / AnyTLS + TLS / Hysteria2 + TLS
@@ -37,10 +37,416 @@ XRAYR_BIN_DIR="/usr/local/bin"
 XRAYR_BIN_NAME="XrayR"
 XRAYR_SERVICE="/etc/systemd/system/xrayr.service"
 XRAYR_REPO="HenZenKuriRIP/XrayR4u"
-XRAYR_VERSION="v0.9.18"
-# v0.9.18 的 Release 已含 Hysteria2，并会核对面板 server_name 与 CertDomain。为 false 时，选项 [4] 可以下载该 Release。
+XRAYR_VERSION="v0.9.19"
+# v0.9.19 的 Release 已含 Hysteria2，并会核对面板 server_name 与 CertDomain。为 false 时，选项 [4] 可以下载该 Release。
 # 同目录若已有 ./XrayR，脚本仍优先使用本地文件。
 HYSTERIA2_NEEDS_LOCAL_BINARY=false
+
+# BEGIN_TESTABLE_HELPERS
+# 纯函数，安装流程和 deploy 回归测试共用。不要在这里访问面板。
+
+classify_address_set() {
+    local state="$1"
+    local records="$2"
+    local local_ips="$3"
+    local public_ips="$4"
+    local rec hay
+    case "$state" in
+        nxdomain) printf '%s\n' nxdomain; return 0 ;;
+        fail) printf '%s\n' fail; return 0 ;;
+    esac
+    if [[ -z "$records" ]]; then
+        printf '%s\n' empty
+        return 0
+    fi
+    hay=",${local_ips},${public_ips},"
+    IFS=',' read -r -a _recs <<< "$records"
+    for rec in "${_recs[@]}"; do
+        [[ -z "$rec" ]] && continue
+        if [[ "$hay" == *",${rec},"* ]]; then
+            printf '%s\n' ok
+            return 0
+        fi
+    done
+    printf '%s\n' mismatch
+}
+
+sni_relation() {
+    local panel cert
+    panel=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+    cert=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+    if [[ -z "$panel" || -z "$cert" ]]; then
+        printf '%s\n' ok
+        return 0
+    fi
+    if [[ "$panel" == "$cert" ]]; then
+        printf '%s\n' ok
+    else
+        printf '%s\n' mismatch
+    fi
+}
+
+config_has_existing_node() {
+    local file="$1"
+    [[ -f "$file" ]] || return 1
+    grep -E -q 'NodeType:[[:space:]]*(Vless|vless|anytls|Anytls|AnyTLS|hysteria2|hysteria|hy2|Hysteria2|Hysteria|HY2)([[:space:]]|$)' "$file"
+}
+
+# 参数: vless端口 anytls端口 hy2端口 需要80 vless开 anytls开 hy2开 伪装开
+# 输出一行: tcp=80,8443 udp=443
+assemble_firewall_ports() {
+    local vless_port="$1"
+    local anytls_port="$2"
+    local hy2_port="$3"
+    local need80="$4"
+    local vless_on="$5"
+    local anytls_on="$6"
+    local hy2_on="$7"
+    local masq_on="$8"
+    local tcp="" udp="" value list
+    _fw_add() {
+        list="$1"
+        value="$2"
+        [[ -z "$value" ]] && { printf '%s' "$list"; return 0; }
+        case ",${list}," in
+            *",${value},"*) printf '%s' "$list" ;;
+            *)
+                if [[ -z "$list" ]]; then
+                    printf '%s' "$value"
+                else
+                    printf '%s' "${list},${value}"
+                fi
+                ;;
+        esac
+    }
+    if [[ "$vless_on" == "1" ]]; then tcp=$(_fw_add "$tcp" "$vless_port"); fi
+    if [[ "$anytls_on" == "1" ]]; then tcp=$(_fw_add "$tcp" "$anytls_port"); fi
+    if [[ "$need80" == "1" || "$masq_on" == "1" ]]; then tcp=$(_fw_add "$tcp" 80); fi
+    if [[ "$masq_on" == "1" ]]; then tcp=$(_fw_add "$tcp" 443); fi
+    if [[ "$hy2_on" == "1" ]]; then udp=$(_fw_add "$udp" "$hy2_port"); fi
+    printf 'tcp=%s udp=%s\n' "$tcp" "$udp"
+}
+# END_TESTABLE_HELPERS
+
+# 把逗号分隔的端口放进数组。调用方先声明空数组。
+csv_to_array() {
+    local csv="$1"
+    local dest="$2"
+    local item
+    eval "${dest}=()"
+    [[ -z "$csv" ]] && return 0
+    IFS=',' read -r -a _csv_items <<< "$csv"
+    for item in "${_csv_items[@]}"; do
+        [[ -z "$item" ]] && continue
+        eval "${dest}+=(\"\$item\")"
+    done
+}
+
+local_ip_csv() {
+    local raw=""
+    if command -v ip >/dev/null 2>&1; then
+        raw=$(ip -o addr show 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | sort -u | paste -sd, - || true)
+    elif command -v ifconfig >/dev/null 2>&1; then
+        raw=$(ifconfig 2>/dev/null | awk '/inet /{print $2} /inet6 /{print $2}' | sort -u | paste -sd, - || true)
+    fi
+    printf '%s\n' "$raw"
+}
+
+public_ip_csv() {
+    local ip url
+    for url in https://api.ipify.org https://checkip.amazonaws.com https://ifconfig.me/ip; do
+        ip=$(curl -fsS --max-time 4 "$url" 2>/dev/null | tr -d '[:space:]' || true)
+        if [[ "$ip" =~ ^[0-9A-Fa-f:.]+$ ]]; then
+            printf '%s\n' "$ip"
+            return 0
+        fi
+    done
+    printf '\n'
+}
+
+# 打印问题文本。没有问题时不打印。不退出，由调用方决定。
+domain_problem() {
+    local domain="$1"
+    local records kind local_ips public_ips
+    records=$(getent ahosts "$domain" 2>/dev/null | awk '{print $1}' | sort -u | paste -sd, - || true)
+    if [[ -z "$records" ]]; then
+        printf '%s\n' "域名 ${domain} 无法解析，或没有 A/AAAA 记录。申请证书和启动之前已停止。"
+        return 0
+    fi
+    local_ips=$(local_ip_csv)
+    public_ips=$(public_ip_csv)
+    kind=$(classify_address_set records "$records" "$local_ips" "$public_ips")
+    if [[ "$kind" == "ok" ]]; then
+        return 0
+    fi
+    printf '%s\n' "域名 ${domain} 解析到 ${records}，和本机地址（${local_ips:-无}）以及公网地址（${public_ips:-未取得}）都不一致。申请证书和启动之前已停止。"
+}
+
+require_domain_points_here() {
+    local problem
+    problem=$(domain_problem "$1")
+    if [[ -n "$problem" ]]; then
+        log_error "$problem"
+    fi
+}
+
+ask_listen_port() {
+    local label="$1"
+    local dest="$2"
+    local value=""
+    while true; do
+        echo ""
+        echo -e "  ${YELLOW}没有从面板读到 ${label} 的 server_port。${NC}"
+        echo -e "  ${BOLD}请输入该节点在面板上的端口（1-65535）。脚本不会改用 443。${NC}"
+        read -r -p "  → " value
+        if [[ "$value" =~ ^[0-9]+$ ]] && (( value >= 1 && value <= 65535 )); then
+            printf -v "$dest" '%s' "$value"
+            return 0
+        fi
+        log_warn "端口必须是 1 到 65535 的整数"
+    done
+}
+
+# 成功时打印两行: server_port 和 server_name。临时文件含私钥，读完即删。
+fetch_uniproxy_lines() {
+    local node_id="$1"
+    local api_key="$2"
+    local tmp code
+    tmp=$(mktemp)
+    code=$(curl -sS -o "$tmp" -w '%{http_code}' \
+        --connect-timeout 10 --max-time 20 \
+        -A "XrayR/${XRAYR_VERSION#v}" \
+        -H "Authorization: Bearer ${api_key}" \
+        -H "X-Api-Key: ${api_key}" \
+        "${V2BOARD_HOST%/}/api/v1/server/UniProxy/config?node_id=${node_id}" 2>/dev/null || true)
+    if [[ "$code" != "200" ]]; then
+        rm -f "$tmp"
+        log_warn "节点 ${node_id} 的 /config 没有成功（HTTP ${code:-失败}）。不会改用 443。" >&2
+        return 1
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+        rm -f "$tmp"
+        log_warn "没有 python3，读不了 server_port。不会改用 443。" >&2
+        return 1
+    fi
+    python3 - "$tmp" << 'PY'
+import json, sys
+path = sys.argv[1]
+with open(path, encoding="utf-8") as fh:
+    data = json.load(fh)
+port = data.get("server_port", "")
+sni = ""
+ts = data.get("tls_settings") or {}
+if isinstance(ts, dict):
+    sni = ts.get("server_name") or ""
+print(port)
+print(sni)
+PY
+    local rc=$?
+    rm -f "$tmp"
+    return "$rc"
+}
+
+load_one_port() {
+    local label="$1"
+    local node_id="$2"
+    local api_key="$3"
+    local port_var="$4"
+    local sni_var="${5:-}"
+    local out port sni
+    if out=$(fetch_uniproxy_lines "$node_id" "$api_key"); then
+        port=$(printf '%s\n' "$out" | sed -n '1p' | tr -d '[:space:]')
+        sni=$(printf '%s\n' "$out" | sed -n '2p')
+        if [[ "$port" =~ ^[0-9]+$ ]] && (( port >= 1 && port <= 65535 )); then
+            printf -v "$port_var" '%s' "$port"
+            if [[ -n "$sni_var" ]]; then
+                printf -v "$sni_var" '%s' "$sni"
+            fi
+            log_info "${label} 面板端口: ${port}"
+            return 0
+        fi
+        log_warn "${label} 的 server_port 无效。" >&2
+    fi
+    ask_listen_port "$label" "$port_var"
+}
+
+load_panel_ports() {
+    VLESS_LISTEN_PORT=""
+    ANYTLS_LISTEN_PORT=""
+    HY2_LISTEN_PORT=""
+    HY2_PANEL_SNI=""
+    if $INSTALL_VLESS; then
+        load_one_port "VLESS" "$NODE_ID" "$VLESS_API_KEY" VLESS_LISTEN_PORT
+    fi
+    if $INSTALL_ANYTLS; then
+        load_one_port "AnyTLS" "$ANYTLS_NODE_ID" "$ANYTLS_API_KEY" ANYTLS_LISTEN_PORT
+    fi
+    if $INSTALL_HY2; then
+        load_one_port "Hysteria2" "$(hy2_panel_id)" "$HY2_API_KEY" HY2_LISTEN_PORT HY2_PANEL_SNI
+        local rel
+        rel=$(sni_relation "$HY2_PANEL_SNI" "$DOMAIN_NAME")
+        if [[ "$rel" == "mismatch" ]]; then
+            log_error "面板 tls_settings.server_name（${HY2_PANEL_SNI}）和证书域名（${DOMAIN_NAME}）不一致。已停止。空的 server_name 不会触发这道检查。"
+        fi
+        if [[ -z "$HY2_PANEL_SNI" ]]; then
+            log_warn "面板 /config 没有 tls_settings.server_name。订阅里的 host 不在这个接口里，结束时会提醒你把 host 写成 ${DOMAIN_NAME}。"
+        fi
+    fi
+}
+
+apply_firewall_ports() {
+    local need80=0 masq=0 vless=0 anytls=0 hy2=0 line tcp udp
+    if [[ "${CERT_MODE:-}" == "http" ]]; then
+        need80=1
+    fi
+    if [[ "${HY2_CAMOUFLAGE:-false}" == "true" ]]; then
+        masq=1
+    fi
+    $INSTALL_VLESS && vless=1
+    $INSTALL_ANYTLS && anytls=1
+    $INSTALL_HY2 && hy2=1
+    line=$(assemble_firewall_ports \
+        "${VLESS_LISTEN_PORT:-}" "${ANYTLS_LISTEN_PORT:-}" "${HY2_LISTEN_PORT:-}" \
+        "$need80" "$vless" "$anytls" "$hy2" "$masq")
+    tcp=${line#tcp=}
+    tcp=${tcp%% udp=*}
+    udp=${line#*udp=}
+    FIREWALL_PORTS=()
+    FIREWALL_UDP_PORTS=()
+    csv_to_array "$tcp" FIREWALL_PORTS
+    csv_to_array "$udp" FIREWALL_UDP_PORTS
+}
+
+print_cloud_firewall_reminder() {
+    local tcp_show udp_show
+    tcp_show="${FIREWALL_PORTS[*]:-（无）}"
+    udp_show="${FIREWALL_UDP_PORTS[*]:-（无）}"
+    echo ""
+    echo -e "  ${RED}云安全组必须放行和下面相同的端口。脚本只能改本机防火墙。${NC}"
+    echo -e "  ${YELLOW}TCP: ${tcp_show}${NC}"
+    echo -e "  ${YELLOW}UDP: ${udp_show}${NC}"
+    if $INSTALL_HY2; then
+        echo -e "  ${YELLOW}TCP 能连通，不能证明 UDP 可用。${NC}"
+    fi
+    echo -e "  ${YELLOW}Vultr / AWS / 阿里云 / 腾讯云的安全组都要按这一组另开。${NC}"
+    echo ""
+}
+
+install_hy2_camouflage() {
+    local email="$CERT_EMAIL"
+    local webroot="/var/www/xrayr-masq"
+    local site="/etc/nginx/sites-available/xrayr-masq.conf"
+    if [[ "${HY2_CAMOUFLAGE:-false}" != "true" ]]; then
+        return 0
+    fi
+    if $INSTALL_VLESS && [[ "$VLESS_LISTEN_PORT" == "443" ]]; then
+        log_error "伪装站要占用 TCP 443，VLESS 的面板端口也是 443。请把 VLESS 改成其他 TCP 端口后再装。"
+    fi
+    require_domain_points_here "$DOMAIN_NAME"
+    log_step "安装 Hysteria2 伪装站"
+    if command -v apt-get >/dev/null 2>&1; then
+        apt-get update
+        DEBIAN_FRONTEND=noninteractive apt-get install -y nginx certbot
+    elif command -v dnf >/dev/null 2>&1; then
+        dnf install -y nginx certbot
+    else
+        log_error "找不到 apt-get 或 dnf，无法安装 nginx 和 certbot。"
+    fi
+    mkdir -p "$webroot" /etc/letsencrypt/renewal-hooks/deploy
+    cat > "${webroot}/index.html" << 'HTML'
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Welcome</title></head>
+<body><h1>Welcome</h1><p>This site is under construction.</p></body>
+</html>
+HTML
+    # 先只听 80，让 certbot webroot 通过。不要另写 listen 127.0.0.1:80。
+    cat > "$site" << NGINX
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN_NAME};
+    root ${webroot};
+    location ^~ /.well-known/acme-challenge/ {
+        default_type "text/plain";
+        root ${webroot};
+    }
+    location / {
+        try_files /index.html =404;
+    }
+}
+NGINX
+    if [[ -d /etc/nginx/sites-enabled ]]; then
+        ln -sf "$site" /etc/nginx/sites-enabled/xrayr-masq.conf
+        rm -f /etc/nginx/sites-enabled/default
+    elif ! grep -q "sites-available/xrayr-masq.conf" /etc/nginx/nginx.conf 2>/dev/null; then
+        mkdir -p /etc/nginx/conf.d
+        cp "$site" /etc/nginx/conf.d/xrayr-masq.conf
+    fi
+    nginx -t
+    systemctl enable nginx
+    systemctl restart nginx
+    certbot certonly --webroot -w "$webroot" -d "$DOMAIN_NAME" \
+        --agree-tos --non-interactive -m "$email" --keep-until-expiring
+    install -d -m 755 "${XRAYR_INSTALL_DIR}/cert"
+    cp "/etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem" "${XRAYR_INSTALL_DIR}/cert/${DOMAIN_NAME}.crt"
+    cp "/etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem" "${XRAYR_INSTALL_DIR}/cert/${DOMAIN_NAME}.key"
+    chmod 600 "${XRAYR_INSTALL_DIR}/cert/${DOMAIN_NAME}.crt" "${XRAYR_INSTALL_DIR}/cert/${DOMAIN_NAME}.key"
+    CERT_MODE="file"
+    CERT_FILE_PATH="${XRAYR_INSTALL_DIR}/cert/${DOMAIN_NAME}.crt"
+    KEY_FILE_PATH="${XRAYR_INSTALL_DIR}/cert/${DOMAIN_NAME}.key"
+    cat > "/etc/letsencrypt/renewal-hooks/deploy/xrayr-${DOMAIN_NAME}.sh" << HOOK
+#!/bin/bash
+set -euo pipefail
+lineage="\${RENEWED_LINEAGE:-/etc/letsencrypt/live/${DOMAIN_NAME}}"
+domain=\$(basename "\$lineage")
+install -d -m 755 ${XRAYR_INSTALL_DIR}/cert
+cp "\$lineage/fullchain.pem" "${XRAYR_INSTALL_DIR}/cert/\${domain}.crt"
+cp "\$lineage/privkey.pem" "${XRAYR_INSTALL_DIR}/cert/\${domain}.key"
+chmod 600 "${XRAYR_INSTALL_DIR}/cert/\${domain}.crt" "${XRAYR_INSTALL_DIR}/cert/\${domain}.key"
+systemctl try-restart xrayr || true
+HOOK
+    chmod 700 "/etc/letsencrypt/renewal-hooks/deploy/xrayr-${DOMAIN_NAME}.sh"
+    # 证书到手后再换成：公网 80 返回 301，本机 127.0.0.1 仍走同一个 listen 80。
+    cat > "$site" << NGINX
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name ${DOMAIN_NAME};
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem;
+    root ${webroot};
+    index index.html;
+}
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN_NAME};
+    root ${webroot};
+
+    location ^~ /.well-known/acme-challenge/ {
+        default_type "text/plain";
+        root ${webroot};
+    }
+    location / {
+        error_page 418 = @local_masq;
+        if (\$remote_addr = 127.0.0.1) { return 418; }
+        if (\$remote_addr = ::1) { return 418; }
+        return 301 https://\$host\$request_uri;
+    }
+    location @local_masq {
+        root ${webroot};
+        rewrite ^ /index.html break;
+    }
+}
+NGINX
+    if [[ -d /etc/nginx/conf.d ]] && [[ ! -d /etc/nginx/sites-enabled ]]; then
+        cp "$site" /etc/nginx/conf.d/xrayr-masq.conf
+    fi
+    nginx -t
+    systemctl reload nginx
+    log_info "伪装站已就绪。公网 TCP 80 返回 301，本机 127.0.0.1:80 返回页面。Hysteria2 反代到这个地址。"
+}
 
 # ============================================================================
 # 卸载函数
@@ -204,7 +610,7 @@ clear
 echo ""
 echo -e "${CYAN}╔═══════════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║                                                   ║${NC}"
-echo -e "${CYAN}║        ${BOLD}XrayR v0.9.18 — VPS 一键部署脚本${NC}${CYAN}             ║${NC}"
+echo -e "${CYAN}║        ${BOLD}XrayR v0.9.19 — VPS 一键部署脚本${NC}${CYAN}             ║${NC}"
 echo -e "${CYAN}║   VLESS+REALITY / TLS+XHTTP+CDN / AnyTLS+TLS      ║${NC}"
 echo -e "${CYAN}║        适配 K2Board (UniProxy) 面板                 ║${NC}"
 echo -e "${CYAN}║                                                   ║${NC}"
@@ -297,6 +703,36 @@ collect_hysteria2_tls() {
     done
     echo ""
     echo -e "  ${GREEN}域名已记录: ${DOMAIN_NAME}${NC}"
+    require_domain_points_here "$DOMAIN_NAME"
+
+    HY2_CAMOUFLAGE=false
+    echo ""
+    echo -e "  ${BOLD}是否用 nginx 占用 TCP 80 和 TCP 443，给 Hysteria2 做伪装站？${NC}"
+    echo -e "  ${YELLOW}默认否。选是之后，公网 80 会 301 到 HTTPS，本机 127.0.0.1:80 返回页面。${NC}"
+    echo -e "  ${YELLOW}VLESS 的面板端口如果也是 443，安装会停止。UDP 仍给 Hysteria2。${NC}"
+    echo -e "  ${YELLOW}输入 Y 安装，其他任意键保持现在的证书方式和 404 伪装。${NC}"
+    read -r -p "  → " masq_answer
+    if [[ "${masq_answer:0:1}" == "Y" || "${masq_answer:0:1}" == "y" ]]; then
+        HY2_CAMOUFLAGE=true
+        while true; do
+            echo -e "  ${BOLD}请输入证书通知邮箱（Let's Encrypt 要求）：${NC}"
+            read -r -p "  → " CERT_EMAIL
+            if [[ -z "$CERT_EMAIL" || ! "$CERT_EMAIL" =~ @ ]]; then
+                log_warn "请输入有效的邮箱地址"
+                continue
+            fi
+            break
+        done
+        CERT_MODE="file"
+        CERT_FILE_PATH="${XRAYR_INSTALL_DIR}/cert/${DOMAIN_NAME}.crt"
+        KEY_FILE_PATH="${XRAYR_INSTALL_DIR}/cert/${DOMAIN_NAME}.key"
+        echo -e "  ${GREEN}将安装 nginx + certbot，证书复制到 ${CERT_FILE_PATH}${NC}"
+        echo -e "  ${GREEN}Hysteria2 伪装: MasqType proxy，MasqURL http://127.0.0.1:80${NC}"
+        echo -e "  ${YELLOW}不写混淆密码，也不写带宽。${NC}"
+        echo ""
+        pause 2
+        return 0
+    fi
 
     echo ""
     echo -e "  ${BOLD}━━━ TLS 证书配置 ━━━${NC}"
@@ -585,6 +1021,11 @@ HY2_NODE_ID=""           # 仅 [5] 使用；[4] 继续用 NODE_ID
 VLESS_API_KEY=""
 ANYTLS_API_KEY=""
 HY2_API_KEY=""
+HY2_CAMOUFLAGE=false
+VLESS_LISTEN_PORT=""
+ANYTLS_LISTEN_PORT=""
+HY2_LISTEN_PORT=""
+HY2_PANEL_SNI=""
 
 # 双协议模式：面板上 VLESS 和 AnyTLS 是不同的节点，NodeID 不同
 if $INSTALL_VLESS && $INSTALL_ANYTLS; then
@@ -915,7 +1356,9 @@ fi
 if $INSTALL_HY2; then
 echo -e "  │  🟣 Hysteria2: NodeID $(hy2_panel_id)，Key $(mask_key "$HY2_API_KEY")${NC}"
 echo -e "  │     域名:     ${GREEN}${DOMAIN_NAME}${NC}"
-if [[ "$CERT_MODE" == "http" ]]; then
+if [[ "${HY2_CAMOUFLAGE:-false}" == "true" ]]; then
+echo -e "  │     证书:     ${GREEN}伪装站 certbot，复制到 ${CERT_FILE_PATH}${NC}"
+elif [[ "$CERT_MODE" == "http" ]]; then
 echo -e "  │     证书:     ${GREEN}HTTP 自动申请 (${CERT_EMAIL})${NC}"
 else
 echo -e "  │     证书:     ${GREEN}${CERT_FILE_PATH}${NC}"
@@ -1038,8 +1481,8 @@ fi
 
 # 选项 [4] 和 [5] 会整份重写 config.yml。已经在跑 VLESS / AnyTLS 时直接停止。
 if $INSTALL_HY2 && [[ -f "$XRAYR_INSTALL_DIR/config.yml" ]]; then
-    if grep -E -q 'NodeType:[[:space:]]*(Vless|vless|anytls|Anytls|AnyTLS)' "$XRAYR_INSTALL_DIR/config.yml"; then
-        log_error "检测到 ${XRAYR_INSTALL_DIR}/config.yml 里已有 VLESS 或 AnyTLS。安装脚本会覆盖整份配置，已停止。正在跑的机器保持现有二进制，不要为了加 Hysteria2 换成 v0.9.18。新机器请看 deploy/HYSTERIA2.md。"
+    if config_has_existing_node "$XRAYR_INSTALL_DIR/config.yml"; then
+        log_error "检测到 ${XRAYR_INSTALL_DIR}/config.yml 里已有 VLESS、AnyTLS 或 Hysteria2。安装脚本会覆盖整份配置，已停止。正在跑的 VLESS 保持 v0.9.16，不要为了这次更新换成 v0.9.19。新机器请看 deploy/HYSTERIA2.md。"
     fi
 fi
 
@@ -1199,14 +1642,20 @@ pause 2
 # ============================================================================
 # 5. 生成配置文件
 # ============================================================================
-log_step "第八步：生成配置文件"
+log_step "第八步：读取面板端口并生成配置文件"
 pause 1
+
+load_panel_ports
+if $INSTALL_HY2; then
+    require_domain_points_here "$DOMAIN_NAME"
+fi
+install_hy2_camouflage
 
 # 主配置 — 根据安装模式动态生成 Nodes 列表
 cat > "$XRAYR_INSTALL_DIR/config.yml" << YML
 # ============================================================================
 # XrayR 配置文件 — 安装模式: ${INSTALL_MODE}
-# 内置 xray-core v26.11.9 | XrayR4u v0.9.18
+# 内置 xray-core v26.11.9 | XrayR4u v0.9.19
 # ============================================================================
 Log:
   Level: warning
@@ -1341,13 +1790,15 @@ if $INSTALL_HY2; then
       DisableGetRule: false
       DisableIVCheck: false
       # 密码是面板用户 UUID。传输固定为 hysteria / UDP / ALPN h3。
-      # 不读取 Transport、XHTTP、REALITY。可选混淆见 deploy/HYSTERIA2.md。
-      # Hysteria2:
-      #   MasqType: "404"
-      #   ObfsPassword: ""
-      #   Congestion: ""
-      #   Up: ""
-      #   Down: ""
+      # 不读取 Transport、XHTTP、REALITY。不写混淆和带宽。
+      $(if [[ "${HY2_CAMOUFLAGE:-false}" == "true" ]]; then
+          echo "Hysteria2:"
+          echo "        MasqType: \"proxy\""
+          echo "        MasqURL: \"http://127.0.0.1:80\""
+      else
+          echo "# Hysteria2:"
+          echo "      #   MasqType: \"404\""
+      fi)
       CertConfig:
         CertMode: $CERT_MODE
         CertDomain: "$DOMAIN_NAME"
@@ -1439,7 +1890,7 @@ pause 1
 log_info "设置文件权限..."
 chown -R root:root "$XRAYR_INSTALL_DIR"
 chmod 755 "$XRAYR_INSTALL_DIR" "$XRAYR_INSTALL_DIR"/log "$XRAYR_INSTALL_DIR"/cert "$XRAYR_INSTALL_DIR"/cert/certificates "$XRAYR_INSTALL_DIR"/config 2>/dev/null || true
-chmod 644 "$XRAYR_INSTALL_DIR/config.yml"
+chmod 600 "$XRAYR_INSTALL_DIR/config.yml"
 pause 1
 
 # ============================================================================
@@ -1458,6 +1909,7 @@ Wants=network.target
 [Service]
 Type=simple
 User=root
+WorkingDirectory=/etc/XrayR
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_RAW CAP_DAC_OVERRIDE
 AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_RAW CAP_DAC_OVERRIDE
 NoNewPrivileges=yes
@@ -1536,21 +1988,19 @@ pause 2
 log_step "第十一步：防火墙配置"
 pause 1
 
-# 确定需要放行的端口。面板端口若不是 443，还要按实际 server_port 另开。
-FIREWALL_PORTS=(443)              # VLESS REALITY / AnyTLS TLS / Hysteria2 默认
-if $INSTALL_VLESS || [[ "$CERT_MODE" == "http" ]]; then
-    FIREWALL_PORTS+=(80)          # REALITY fallback / Let's Encrypt HTTP
-fi
-# 去重
-FIREWALL_PORTS=($(printf '%s\n' "${FIREWALL_PORTS[@]}" | sort -u))
-FIREWALL_UDP_PORTS=()
-if $INSTALL_HY2; then
-    FIREWALL_UDP_PORTS=(443)      # Hysteria2 听 UDP，不是 TCP
-fi
+# 端口来自面板 server_port。HTTP 证书或伪装站才额外放行 TCP 80。
+# 没有读到端口时前面已经询问，这里不再回退到 443。
+apply_firewall_ports
 
-log_info "需要放行的 TCP 端口: ${FIREWALL_PORTS[*]}"
+if [[ ${#FIREWALL_PORTS[@]} -gt 0 ]]; then
+    log_info "需要放行的 TCP 端口: ${FIREWALL_PORTS[*]}"
+else
+    log_info "需要放行的 TCP 端口: （无）"
+fi
 if [[ ${#FIREWALL_UDP_PORTS[@]} -gt 0 ]]; then
     log_info "需要放行的 UDP 端口: ${FIREWALL_UDP_PORTS[*]}"
+else
+    log_info "需要放行的 UDP 端口: （无）"
 fi
 
 if command -v ufw &>/dev/null && ufw status 2>/dev/null | grep -q "active"; then
@@ -1576,10 +2026,12 @@ elif command -v firewall-cmd &>/dev/null && firewall-cmd --state 2>/dev/null | g
     log_info "firewalld 规则已添加"
 
 elif command -v nft &>/dev/null && nft list ruleset 2>/dev/null | grep -q "input"; then
-    log_info "检测到 nftables"
-    echo -e "  ${YELLOW}请手动执行: nft add rule inet filter input tcp dport {443,80} accept${NC}"
-    if $INSTALL_HY2; then
-        echo -e "  ${YELLOW}Hysteria2 另加: nft add rule inet filter input udp dport 443 accept${NC}"
+    log_info "检测到 nftables，请按实际端口手动添加："
+    if [[ ${#FIREWALL_PORTS[@]} -gt 0 ]]; then
+        echo -e "  ${YELLOW}nft add rule inet filter input tcp dport {$(IFS=,; echo "${FIREWALL_PORTS[*]}")} accept${NC}"
+    fi
+    if [[ ${#FIREWALL_UDP_PORTS[@]} -gt 0 ]]; then
+        echo -e "  ${YELLOW}nft add rule inet filter input udp dport {$(IFS=,; echo "${FIREWALL_UDP_PORTS[*]}")} accept${NC}"
     fi
 
 elif command -v iptables &>/dev/null; then
@@ -1603,17 +2055,9 @@ elif command -v iptables &>/dev/null; then
     log_info "iptables 规则已添加"
 
 else
-    log_warn "未检测到系统防火墙"
-    echo ""
-    echo -e "  ${RED}⚠️  请务必检查云控制台防火墙，放行 TCP 443 端口：${NC}"
-    if $INSTALL_HY2; then
-        echo -e "  ${RED}⚠️  Hysteria2 还要放行 UDP 443（面板端口不是 443 时按实际端口）：${NC}"
-    fi
-    echo -e "  ${YELLOW}  Vultr:   Products → Firewall → Add Rule (TCP 443)${NC}"
-    echo -e "  ${YELLOW}  AWS:     EC2 → Security Groups → Inbound (TCP 443)${NC}"
-    echo -e "  ${YELLOW}  阿里云:  ECS → 安全组 → 入方向 (TCP 443)${NC}"
-    echo -e "  ${YELLOW}  腾讯云:  CVM → 安全组 → 入站规则 (TCP 443)${NC}"
+    log_warn "未检测到本机防火墙工具，只打印要放行的端口。"
 fi
+print_cloud_firewall_reminder
 pause 2
 
 # ============================================================================
@@ -1713,6 +2157,9 @@ log_step "第十二步：启动 XrayR 服务"
 pause 1
 
 echo -e "  ${CYAN}正在启用并启动 xrayr 服务...${NC}"
+if $INSTALL_HY2; then
+    require_domain_points_here "$DOMAIN_NAME"
+fi
 systemctl enable xrayr
 systemctl restart xrayr
 
@@ -1725,6 +2172,33 @@ else
     echo ""
     log_warn "❌ XrayR 启动失败，请运行以下命令排查:"
     echo -e "     ${YELLOW}journalctl -u xrayr -n 50${NC}"
+fi
+
+echo ""
+echo -e "  ${BOLD}当前监听（ss）${NC}"
+ss -tulnp 2>/dev/null | grep -E 'XrayR|nginx' || true
+echo ""
+if $INSTALL_HY2 || $INSTALL_ANYTLS; then
+    cert_show=""
+    if [[ -n "${CERT_FILE_PATH:-}" && -f "$CERT_FILE_PATH" ]]; then
+        cert_show="$CERT_FILE_PATH"
+    elif [[ -n "${DOMAIN_NAME:-}" && -f "${XRAYR_INSTALL_DIR}/cert/certificates/${DOMAIN_NAME}.crt" ]]; then
+        cert_show="${XRAYR_INSTALL_DIR}/cert/certificates/${DOMAIN_NAME}.crt"
+    fi
+    if [[ -n "$cert_show" ]] && command -v openssl >/dev/null 2>&1; then
+        echo -e "  ${BOLD}证书 ${cert_show}${NC}"
+        openssl x509 -in "$cert_show" -noout -subject -enddate 2>/dev/null || true
+        echo ""
+    fi
+fi
+echo -e "  ${BOLD}用户加载日志${NC}"
+journalctl -u xrayr --no-pager -n 400 2>/dev/null | grep -E 'Added [0-9]+ (new|hysteria2) users|Updated [0-9]+ anytls users|start failed' || true
+echo ""
+if $INSTALL_HY2; then
+    echo -e "  ${YELLOW}上面的 TCP 监听正常，不能证明 Hysteria2 的 UDP 已经可用。${NC}"
+    echo -e "  ${YELLOW}面板里 Hysteria2 的 host 必须等于 ${DOMAIN_NAME}。/config 不返回订阅主机名，节点核对不了这一项。${NC}"
+    echo -e "  ${YELLOW}证书有效期内，这个名字都要解析到本机。${NC}"
+    echo ""
 fi
 pause 2
 
@@ -1746,7 +2220,7 @@ echo -e "  ┌──────────────────────
 echo -e "  │  面板地址:   ${GREEN}${V2BOARD_HOST}${NC}"
 echo -e "  │  安装模式:   ${GREEN}${INSTALL_MODE}${NC}"
 if $INSTALL_VLESS; then
-echo -e "  │  🟢 VLESS:    NodeID ${NODE_ID}，Key $(mask_key "$VLESS_API_KEY")，REALITY:443${NC}"
+echo -e "  │  🟢 VLESS:    NodeID ${NODE_ID}，Key $(mask_key "$VLESS_API_KEY")，TCP ${VLESS_LISTEN_PORT:-未取得}${NC}"
 fi
 if $INSTALL_ANYTLS; then
 echo -e "  │  🔵 AnyTLS:   NodeID ${ANYTLS_NODE_ID}，Key $(mask_key "$ANYTLS_API_KEY")，域名 ${GREEN}${DOMAIN_NAME}${NC}"
@@ -1762,8 +2236,11 @@ echo -e "  │     Fallback: ${RED}未配置（有指纹风险）${NC}"
 fi
 fi
 if $INSTALL_HY2; then
-echo -e "  │  🟣 Hysteria2: NodeID $(hy2_panel_id)，Key $(mask_key "$HY2_API_KEY")，UDP，域名 ${GREEN}${DOMAIN_NAME}${NC}"
+echo -e "  │  🟣 Hysteria2: NodeID $(hy2_panel_id)，Key $(mask_key "$HY2_API_KEY")，UDP ${HY2_LISTEN_PORT:-未取得}，域名 ${GREEN}${DOMAIN_NAME}${NC}"
 echo -e "  │     ALPN:      ${GREEN}h3${NC}    REALITY: ${GREEN}关闭${NC}"
+if [[ "${HY2_CAMOUFLAGE:-false}" == "true" ]]; then
+echo -e "  │     伪装:     ${GREEN}proxy → http://127.0.0.1:80${NC}"
+fi
 fi
 echo -e "  │  配置文件:   ${YELLOW}${XRAYR_INSTALL_DIR}/config.yml${NC}"
 echo -e "  │  日志目录:   ${YELLOW}${XRAYR_INSTALL_DIR}/log/${NC}"
@@ -1811,9 +2288,12 @@ echo ""
 fi
 
 if $INSTALL_HY2; then
-echo -e "  ${YELLOW}💡 Hysteria2 监听 UDP。云安全组请放行面板上的 UDP 端口，不要只放行 TCP。${NC}"
-echo -e "  ${YELLOW}   证书申请若选了 HTTP 验证，另外需要开放 80/TCP。${NC}"
-echo -e "  ${YELLOW}   客户端: hysteria2://<用户UUID>@${DOMAIN_NAME}:<端口>?sni=${DOMAIN_NAME}&alpn=h3${NC}"
+echo -e "  ${YELLOW}💡 Hysteria2 监听 UDP ${HY2_LISTEN_PORT:-未取得}。云安全组要放行这个 UDP 端口，不要只放行 TCP。${NC}"
+echo -e "  ${YELLOW}   面板 host 必须写成 ${DOMAIN_NAME}。/config 里没有订阅主机名。${NC}"
+if [[ "${CERT_MODE:-}" == "http" ]]; then
+echo -e "  ${YELLOW}   证书是 HTTP 验证，还要开放 TCP 80。${NC}"
+fi
+echo -e "  ${YELLOW}   客户端: hysteria2://<用户UUID>@${DOMAIN_NAME}:${HY2_LISTEN_PORT:-端口}?sni=${DOMAIN_NAME}&alpn=h3${NC}"
 echo -e "  ${YELLOW}   面板若已下发 hysteria2 订阅，用订阅。否则先用上面这条手工链接。${NC}"
 echo ""
 fi

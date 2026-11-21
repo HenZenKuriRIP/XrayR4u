@@ -160,6 +160,10 @@ func applyHysteriaALPN(tlsSettings *conf.TLSConfig, config *Config) {
 	}
 	for _, a := range explicit {
 		if strings.EqualFold(strings.TrimSpace(a), "h3") {
+			// Write the list back. buildTLSSettings may already have copied it,
+			// but a later change there must not leave h2/http1.1 in place.
+			list := conf.StringList(append([]string{}, explicit...))
+			tlsSettings.ALPN = &list
 			return
 		}
 	}

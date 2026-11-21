@@ -4,13 +4,13 @@
 
 不要新增 UniProxy 路径，也不要给节点增加 JSON 字段。Hysteria2 复用现有 `/config` 与 `/user`。混淆、Brutal、伪装留在节点 `config.yml`，不进面板数据库。
 
-节点程序 **v0.9.18** 内嵌 **xray-core v26.11.9**，可以跑本文的 Hysteria2，也带下面的 REALITY 指纹要求。v0.9.16 二进制仍是 v26.7.11，不要用它。
+节点程序 **v0.9.19** 内嵌 **xray-core v26.11.9**，可以跑本文的 Hysteria2，也带下面的 REALITY 指纹要求。v0.9.16 二进制仍是 v26.7.11，不要用它。
 
 | 项 | 当前值 |
 |---|---|
-| 节点程序 | XrayR4u **v0.9.18** |
+| 节点程序 | XrayR4u **v0.9.19** |
 | 面板协议 | K2Board UniProxy（`/api/v1/server/UniProxy/*`） |
-| 内嵌核心 | **xray-core v26.11.9**。v0.9.18 发布二进制与源码一致；v0.9.16 仍是 v26.7.11 |
+| 内嵌核心 | **xray-core v26.11.9**。v0.9.19 发布二进制与源码一致；v0.9.16 仍是 v26.7.11 |
 | 用户体系 | UUID（VLESS / AnyTLS 复用；Hysteria2 把同一个 UUID 当密码） |
 
 > 节点侧关键参数均支持 **config.yml 本地覆盖**（`ControllerConfig` 非空优先于面板）。
@@ -631,4 +631,4 @@ VLESS / AnyTLS 已经覆盖。Hysteria2 和 v26.11.9 的 REALITY 指纹还要补
 
 ---
 
-*XrayR4u v0.9.18 · xray-core v26.11.9 · REALITY/Vision/PQ + TLS/XHTTP/CDN + AnyTLS + Hysteria2 · UniProxy 无新字段*
+*XrayR4u v0.9.19 · xray-core v26.11.9 · REALITY/Vision/PQ + TLS/XHTTP/CDN + AnyTLS + Hysteria2 · UniProxy 无新字段*

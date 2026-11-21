@@ -274,7 +274,10 @@ func (c *APIClient) parseResponse(res *resty.Response, path string, err error) (
 	if res.StatusCode() >= 400 {
 		// Cap body length so error logs cannot dump large/sensitive panel responses.
 		msg := truncateForLog(string(res.Body()), 256)
-		return nil, fmt.Errorf("request %s failed: status=%d body=%s", url, res.StatusCode(), msg)
+		return nil, &api.HTTPStatusError{
+			Status: res.StatusCode(),
+			Err:    fmt.Errorf("request %s failed: status=%d body=%s", url, res.StatusCode(), msg),
+		}
 	}
 	rtn, err := simplejson.NewJson(res.Body())
 	if err != nil {

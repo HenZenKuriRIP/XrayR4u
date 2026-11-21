@@ -3,7 +3,7 @@
 [![Go Version](https://img.shields.io/badge/Go-1.27+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-MPL%202.0-blue.svg)](LICENSE)
 [![Xray-core](https://img.shields.io/badge/Xray--core-v26.11.9-red.svg)](https://github.com/XTLS/Xray-core)
-[![Release](https://img.shields.io/badge/release-v0.9.18-brightgreen.svg)](https://github.com/HenZenKuriRIP/XrayR4u/releases)
+[![Release](https://img.shields.io/badge/release-v0.9.19-brightgreen.svg)](https://github.com/HenZenKuriRIP/XrayR4u/releases)
 
 XrayR4u 是 [XrayR](https://github.com/XrayR-project/XrayR) 的社区维护分支：Go 语言后端代理管理框架，作为 **K2Board 面板** 与 **Xray-core** 之间的桥梁。
 
@@ -45,13 +45,13 @@ XrayR4u 是 [XrayR](https://github.com/XrayR-project/XrayR) 的社区维护分�
 
 | 项目 | 版本 |
 |------|------|
-| XrayR4u | **v0.9.18** |
+| XrayR4u | **v0.9.19** |
 | Xray-core | **v26.11.9** |
 | Go | 1.27+ |
 
-v0.9.18 是当前发布，内嵌这颗核心，并带 Hysteria2。面板 `server_name` 和本机 `CertDomain` 都有值且不一致时，Hysteria2 拒绝启动。v0.9.17 有 Hysteria2，但没有这道检查。v0.9.16 仍是 xray-core v26.7.11，不能用来跑 Hysteria2。
+v0.9.19 是当前发布，内嵌这颗核心，并带 Hysteria2。没写 `ListenIP` / `SendIP` 时默认都是 `0.0.0.0`。若要只听本机，请把 `ListenIP` 写成 `127.0.0.1`。空字符串不能关掉 `sendThrough`。第一次拉面板失败时，只重试这一条节点，间隔是它自己的 `UpdatePeriodic`，最长等 5 分钟，不会停掉已经启动的另一条。面板 `server_name` 和本机 `CertDomain` 都有值且不一致时，Hysteria2 拒绝启动。这个字符串检查从 v0.9.18 就有。v0.9.17 有 Hysteria2，但没有这道检查。v0.9.16 仍是 xray-core v26.7.11，不能用来跑 Hysteria2。
 
-已经在跑 VLESS REALITY 的机器先留在 v0.9.16。当前面板订阅还没有 `support-x25519mlkem768`，直接换成 v0.9.18 会把原来的 VLESS 断开。等订阅带上这个字段，并且指纹只用 `chrome`、`firefox`、`safari`、`randomized` 之后再升级。`edge`、`ios`、`qq`、`random` 会被 v26.11.9 拒绝。`min_client_ver` 继续用 `1.8.0`，它不管这道密钥交换。Hysteria2 不走 REALITY。
+已经在跑 VLESS REALITY 的机器先留在 v0.9.16。当前面板订阅还没有 `support-x25519mlkem768`，直接换成 v0.9.19 会把原来的 VLESS 断开。等订阅带上这个字段，并且指纹只用 `chrome`、`firefox`、`safari`、`randomized` 之后再升级。`edge`、`ios`、`qq`、`random` 会被 v26.11.9 拒绝。`min_client_ver` 继续用 `1.8.0`，它不管这道密钥交换。Hysteria2 不走 REALITY。
 
 ## 密钥 / 后量子材料生成（节点自带）
 
@@ -75,7 +75,7 @@ XrayR tools help
 bash <(curl -sSL https://raw.githubusercontent.com/HenZenKuriRIP/XrayR4u/main/deploy/install.sh)
 ```
 
-交互输入面板地址和节点 ID，选择协议后，每条节点再输入自己的 API Key。`[1]` 问 VLESS，`[2]` 问 AnyTLS，`[4]` 问 Hysteria2。`[3]` 分别问 VLESS 和 AnyTLS。`[5]` 在新机器上同时写入 VLESS 和 Hysteria2，两条节点使用不同的面板 NodeID，并分别输入 API Key。`[4]` 和 `[5]` 都会下载本版本的 Release。Hysteria2 监听 UDP，端口号可以和 VLESS 的 TCP 相同。已经在跑 VLESS 或 AnyTLS 的机器不要重跑脚本，脚本会整份覆盖 `config.yml`。说明见 [deploy/HYSTERIA2.md](deploy/HYSTERIA2.md)。
+交互输入面板地址和节点 ID，选择协议后，每条节点再输入自己的 API Key。`[1]` 问 VLESS，`[2]` 问 AnyTLS，`[4]` 问 Hysteria2。`[3]` 分别问 VLESS 和 AnyTLS。`[5]` 在新机器上同时写入 VLESS 和 Hysteria2，两条节点使用不同的面板 NodeID，并分别输入 API Key。`[4]` 和 `[5]` 都会下载本版本的 Release。写配置之前，脚本用该节点自己的 Key 请求 `/config`，按返回的 `server_port` 放行防火墙：VLESS 和 AnyTLS 是 TCP，Hysteria2 是 UDP。请求失败就询问端口，不会改用 443。结束时会打印实际端口，并提醒云安全组放行同一组。Hysteria2 在申请证书之前检查域名是否解析到本机。面板订阅里的 `host` 不在 `/config` 里，`host` 必须自行写成证书域名。伪装站默认不装。已经在跑 VLESS、AnyTLS 或 Hysteria2 的机器不要重跑脚本，脚本会整份覆盖 `config.yml`。说明见 [deploy/HYSTERIA2.md](deploy/HYSTERIA2.md)。
 
 ### 可选：WARP 解锁 AI / 流媒体
 
@@ -91,7 +91,7 @@ bash <(curl -sSL https://raw.githubusercontent.com/HenZenKuriRIP/XrayR4u/main/de
 
 ```bash
 # 示例：linux amd64
-curl -sSL -o XrayR https://github.com/HenZenKuriRIP/XrayR4u/releases/download/v0.9.18/XrayR-linux-amd64
+curl -sSL -o XrayR https://github.com/HenZenKuriRIP/XrayR4u/releases/download/v0.9.19/XrayR-linux-amd64
 chmod +x XrayR
 # 与 install.sh 同目录后执行 bash install.sh（脚本优先用本地二进制）
 ```

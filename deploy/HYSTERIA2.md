@@ -102,6 +102,7 @@ Hysteria2 删用户后，新连接会立刻失败。已经建立的 QUIC 会话�
       Timeout: 30
     ControllerConfig:
       ListenIP: 0.0.0.0
+      SendIP: 0.0.0.0
       UpdatePeriodic: 60
       CertConfig:
         CertMode: file
@@ -118,9 +119,11 @@ Hysteria2 删用户后，新连接会立刻失败。已经建立的 QUIC 会话�
       #   Down: ""
 ```
 
-面板侧这条节点：`node_type` 写成 `hysteria2`，`tls=1`，`sni` 填证书域名。v0.9.18 起，节点会把 `/config` 的 `tls_settings.server_name` 和本机 `CertDomain` 比较，两个都有值且不一致就拒绝启动。v0.9.17 的二进制没有这道检查。不需要新的 UniProxy 字段。
+面板侧这条节点：`node_type` 写成 `hysteria2`，`tls=1`，`sni` 填证书域名。v0.9.18 起，节点会把 `/config` 的 `tls_settings.server_name` 和本机 `CertDomain` 比较，两个都有值且不一致就拒绝启动。v0.9.17 的二进制没有这道检查。不需要新的 UniProxy 字段。`/config` 在普通 `tcp` 上不返回订阅 `host`。面板里的 `host` 要和 `CertDomain` 写成同一个名字。
 
-防火墙放行该 UDP 端口。端口号可以和 VLESS 的 TCP 相同。
+`ListenIP` 和 `SendIP` 从 v0.9.19 起，不写时默认都是 `0.0.0.0`。要只绑定本机时，把 `ListenIP` 明确写成 `127.0.0.1`。不要靠留空 `SendIP` 来关掉 `sendThrough`，合并配置时空字符串盖不掉默认值。
+
+防火墙放行该 UDP 端口。端口号可以和 VLESS 的 TCP 相同。云安全组要放行同一组。TCP 能连通不能证明 UDP 可用。
 
 ### 5.1 安装脚本
 
@@ -134,23 +137,25 @@ Hysteria2 删用户后，新连接会立刻失败。已经建立的 QUIC 会话�
 | `[4]` Hysteria2 + TLS | 新机器上只写一条 `NodeType: hysteria2`，只问 Hysteria2 的 API Key |
 | `[5]` VLESS + Hysteria2 | 新机器上同时写两条。分别输入两个 NodeID，以及 VLESS 和 Hysteria2 各自的 API Key |
 
-`[4]` 和 `[5]` 都会询问 Hysteria2 的域名和证书（已有文件，或 HTTP-01），并写入 `EnableReality: false`、`ALPN: ["h3"]`。混淆和 Brutal 保持关闭。`[5]` 里的 VLESS 仍是 REALITY，`CertMode: none`，不使用 Hysteria2 的证书。
+`[4]` 和 `[5]` 都会询问 Hysteria2 的域名和证书（已有文件，或 HTTP-01），并写入 `EnableReality: false`、`ALPN: ["h3"]`。域名解析不到本机，或解析到的地址既不是本机网卡也不是本机公网地址时，脚本在申请证书之前退出。输入域名后会问要不要装伪装站，默认否。选是时安装 nginx 和 certbot：公网 TCP 80 返回 301，本机 `127.0.0.1:80` 在同一个 `listen 80` 上返回页面，证书复制到 `/etc/XrayR/cert/<域名>.crt`，`CertMode: file`，`MasqType: proxy`。VLESS 的面板 TCP 端口若也是 443，脚本停止。混淆和 Brutal 保持关闭。`[5]` 里的 VLESS 仍是 REALITY，`CertMode: none`，不使用 Hysteria2 的证书。
+
+写配置之前，脚本用该节点自己的 Key 请求 `GET /api/v1/server/UniProxy/config?node_id=`，请求头是 `Authorization: Bearer` 和 `X-Api-Key`，`User-Agent` 为 `XrayR/0.9.19`。VLESS / AnyTLS 放行返回的 TCP `server_port`，Hysteria2 放行返回的 UDP `server_port`。请求失败就询问端口，不会改用 443。`config.yml` 权限是 `600`。systemd 的工作目录是 `/etc/XrayR`。
 
 两条限制：
 
-- **v0.9.18** 的 Release 含有 Hysteria2，选 `[4]` 或 `[5]` 会下载它。同目录已有 `./XrayR` 时仍优先用本地文件。**v0.9.16** 没有这个协议，不要用那个二进制。
-- 脚本生成配置时会**整份覆盖** `/etc/XrayR/config.yml`。若文件里已经有 `NodeType: Vless` 或 `anytls`，`[4]` 和 `[5]` 都会直接退出，不替换二进制、不改配置。已经在跑 VLESS 的机器先保持 v0.9.16，不要为了追加 Hysteria2 换二进制。
+- **v0.9.19** 的 Release 含有 Hysteria2，选 `[4]` 或 `[5]` 会下载它。同目录已有 `./XrayR` 时仍优先用本地文件。**v0.9.16** 没有这个协议，不要用那个二进制。v0.9.18 有 `server_name` 检查，但没有这次的默认出口地址、启动重试、面板端口和域名检查。
+- 脚本生成配置时会**整份覆盖** `/etc/XrayR/config.yml`。若文件里已经有 `NodeType: Vless`、`anytls`、`hysteria2`、`hysteria` 或 `hy2`，`[4]` 和 `[5]` 都会直接退出，不替换二进制、不改配置。已经在跑 VLESS 的机器先保持 v0.9.16，不要为了追加 Hysteria2 换二进制。已经装好的机器只替换对应配置项和二进制，不要重跑安装脚本。
 
 ## 6. 上线
 
-已经在跑 VLESS 的机器保持 **v0.9.16**。不要把那台机器的二进制换成 v0.9.18：v26.11.9 的 REALITY 会拒绝没有 `X25519MLKEM768` 的客户端，也会拒绝 `edge`、`ios`、`qq`、`random` 指纹。当前面板订阅还没有 `support-x25519mlkem768`，也没有改写指纹。同一进程换核心后，原来的 VLESS 会先断，Hysteria2 还没加上。
+已经在跑 VLESS 的机器保持 **v0.9.16**。不要把那台机器的二进制换成 v0.9.19：v26.11.9 的 REALITY 会拒绝没有 `X25519MLKEM768` 的客户端，也会拒绝 `edge`、`ios`、`qq`、`random` 指纹。当前面板订阅还没有 `support-x25519mlkem768`，也没有改写指纹。同一进程换核心后，原来的 VLESS 会先断，Hysteria2 还没加上。
 
-等面板单独打开混合密钥和指纹限制之后，再升级旧机器的二进制。在那之前，新机器用安装菜单 `[5]`：两条 `Nodes`、两个面板节点 ID、两把 `ApiKey`。`install.sh` 发现已有 VLESS 或 AnyTLS 就退出，这个行为要保留。
+等面板单独打开混合密钥和指纹限制之后，再升级旧机器的二进制。在那之前，新机器用安装菜单 `[5]`：两条 `Nodes`、两个面板节点 ID、两把 `ApiKey`。`install.sh` 发现已有 VLESS、AnyTLS 或 Hysteria2 就退出，这个行为要保留。机器上已有的 `install.sh` 不会自己更新，要重新拉取仓库里的脚本。
 
 新机器装好后：
 
 1. 看日志出现 `[hysteria2: <id>] Start monitor node status`，以及添加用户的条数。
-2. 用面板订阅，或一条测试链接 `hysteria2://<uuid>@域名:端口?sni=域名&alpn=h3`。错误密码应失败。
+2. 用面板订阅，或一条测试链接 `hysteria2://<uuid>@域名:端口?sni=域名&alpn=h3`。错误密码应失败，错误日志有 `hysteria auth rejected`，里面没有 UUID，也没有 `Hysteria-Auth`。这条日志在升级 xray-core 后要重新打上。
 3. VLESS 和 Hysteria2 的流量、在线各自上报到自己的节点 ID。
 
 热重载会按现有逻辑重建**有变化**的节点。以后只在配置里增加新的 `Nodes[]` 时，旧节点的入站标签不变；重启进程则会全部重新监听。正在跑 v0.9.16 的机器现在不要加这项，见本节开头。

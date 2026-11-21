@@ -106,6 +106,14 @@ func (h *httpHandler) AuthHTTP(w http.ResponseWriter, r *http.Request) bool {
 			w.WriteHeader(StatusAuthOK)
 			return true
 		}
+		// Auth attempt failed. Masquerade still answers below. Do not log the
+		// Hysteria-Auth header or the UUID; access.log only records a later accept.
+		// Re-apply this warning when bumping the vendored xray-core.
+		remote := ""
+		if h.conn != nil && h.conn.RemoteAddr() != nil {
+			remote = h.conn.RemoteAddr().String()
+		}
+		errors.LogWarning(context.Background(), "hysteria auth rejected remote=", remote)
 	}
 	return false
 }

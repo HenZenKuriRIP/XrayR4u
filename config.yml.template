@@ -1,5 +1,5 @@
 # ============================================================================
-# XrayR4u 配置文件模版 v0.9.18
+# XrayR4u 配置文件模版 v0.9.19
 # ============================================================================
 # 内置 Xray-core v26.11.9 (REALITY / XHTTP+CDN / Vision / VLESS Encryption / AnyTLS / Hysteria2)
 # 配置文件需放置在 /etc/XrayR/config.yml
@@ -291,6 +291,7 @@ Nodes:
   #     Timeout: 30
   #   ControllerConfig:
   #     ListenIP: 0.0.0.0
+  #     SendIP: 0.0.0.0
   #     UpdatePeriodic: 60
   #     CertConfig:
   #       CertMode: file

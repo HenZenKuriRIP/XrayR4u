@@ -1,4 +1,4 @@
-# XrayR4u v0.9.18 VPS 部署
+# XrayR4u v0.9.19 VPS 部署
 
 ## 适用场景
 
@@ -8,7 +8,7 @@
 | 架构 | amd64 / arm64 |
 | 面板 | K2Board (UniProxy) |
 | 协议 | VLESS + REALITY / TLS + XHTTP + CDN / AnyTLS + TLS / Hysteria2 + TLS |
-| 核心 | Xray-core **v26.11.9**。v0.9.18 发布二进制与源码一致。v0.9.16 二进制仍是 v26.7.11 |
+| 核心 | Xray-core **v26.11.9**。v0.9.19 发布二进制与源码一致。v0.9.16 二进制仍是 v26.7.11 |
 
 ## 一行命令
 
@@ -21,9 +21,9 @@ bash <(curl -sSL https://raw.githubusercontent.com/HenZenKuriRIP/XrayR4u/main/de
 3. 协议：`[1]` VLESS + REALITY / `[2]` AnyTLS + TLS / `[3]` VLESS + AnyTLS / `[4]` Hysteria2 + TLS / `[5]` VLESS + Hysteria2  
 4. 每条节点自己的 API Key
 
-五个选项都可以下载 Release **v0.9.18**。`[1]` `[2]` `[4]` 只问该协议的 Key。`[3]` 分别问 VLESS 和 AnyTLS。`[5]` 分别问 VLESS 和 Hysteria2。
+五个选项都可以下载 Release **v0.9.19**。`[1]` `[2]` `[4]` 只问该协议的 Key。`[3]` 分别问 VLESS 和 AnyTLS。`[5]` 分别问 VLESS 和 Hysteria2。
 
-`[4]` 和 `[5]` 只适合新机器。`[5]` 同时写入一条 VLESS 和一条 Hysteria2，面板上要先建好两个 NodeID 和两把 ApiKey。已经在跑 VLESS 或 AnyTLS 的机器不要选这两项，也不要把正在跑的 v0.9.16 二进制换成 v0.9.18。安装会整份覆盖 `config.yml`，脚本发现旧节点后会退出。说明见 [HYSTERIA2.md](HYSTERIA2.md)。Hysteria2 听 UDP，端口号可以和 VLESS 的 TCP 相同；脚本会放行 UDP 443，面板端口不是 443 时要另开。
+`[4]` 和 `[5]` 只适合新机器。`[5]` 同时写入一条 VLESS 和一条 Hysteria2，面板上要先建好两个 NodeID 和两把 ApiKey。已经在跑 VLESS、AnyTLS 或 Hysteria2 的机器不要选这两项，也不要把正在跑的 v0.9.16 二进制换成 v0.9.19。安装会整份覆盖 `config.yml`，脚本发现旧节点后会退出。说明见 [HYSTERIA2.md](HYSTERIA2.md)。防火墙按面板 `server_port` 放行：VLESS / AnyTLS 为 TCP，Hysteria2 为 UDP。HTTP 证书或伪装站才额外放行 TCP 80。云安全组要放行同一组。TCP 能通不能证明 UDP 可用。
 
 > 离线：下载 Release 的 `XrayR-linux-amd64` 重命名为 `XrayR`，与 `install.sh` 同目录后执行。不要用 v0.9.16 的 Release 装 Hysteria2。
 
