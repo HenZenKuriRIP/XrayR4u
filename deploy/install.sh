@@ -4,8 +4,9 @@
 # 支持: Debian 12/13, Ubuntu 20.04+/22.04+/24.04+
 # 源码与本版本 Release 均内嵌 xray-core v26.11.9
 # 协议: VLESS + REALITY / TLS+XHTTP+CDN / AnyTLS + TLS / Hysteria2 + TLS
-# Hysteria2 见 deploy/HYSTERIA2.md。菜单 [1][2][3][4] 的配置不变。
-# [5] 只在新机器上同时写入 VLESS 和 Hysteria2，两条节点各用各的 NodeID 和 ApiKey。
+# Hysteria2 见 deploy/HYSTERIA2.md。
+# 选完协议后，每条节点单独输入自己的 API Key。
+# [1][2][4] 只问该协议。[3] 分别问 VLESS 和 AnyTLS。[5] 分别问 VLESS 和 Hysteria2。
 # v0.9.16 的 Release 仍是 xray-core v26.7.11，没有 Hysteria2，不要用那个二进制。
 # 密钥生成: XrayR tools {x25519|mldsa65|vlessenc|mlkem768|uuid}
 #
@@ -216,12 +217,11 @@ pause 2
 # ---------------------------------------------------------------------------
 log_step "第一步：面板连接信息"
 
-echo -e "  ${YELLOW}请准备好以下信息（在 V2Board 面板后台可找到）：${NC}"
+echo -e "  ${YELLOW}请准备好以下信息（在面板的节点页面可找到）：${NC}"
 echo ""
 echo -e "  1. 面板地址     — 例如: ${GREEN}https://panel.your-domain.com${NC}"
-echo -e "  2. API Token    — 面板后台 → 系统设置 → API Token（32位字符串）"
-echo -e "  3. 节点 ID      — 面板后台 → 节点管理 → 节点ID（数字）"
-echo -e "  4. 节点类型     — Vless（UniProxy 接口）"
+echo -e "  2. 节点 ID      — 每条节点自己的数字 ID"
+echo -e "  3. 节点 API Key — 选完协议后，每条节点单独填写自己的 Key"
 echo ""
 pause 2
 
@@ -249,39 +249,11 @@ echo ""
 echo -e "  ${GREEN}面板地址已记录: ${V2BOARD_HOST}${NC}"
 pause 1
 
-# API Token
+# 节点 ID。API Key 在选定协议后按节点分别询问。
 while true; do
     echo ""
-    echo -e "  ${BOLD}请输入面板 API Token：${NC}"
-    echo -e "  ${YELLOW}面板后台 → 系统设置 → API 接口 → Token（32位字符串）${NC}"
-    read -r -p "  → " V2BOARD_KEY
-
-    if [[ -z "$V2BOARD_KEY" ]]; then
-        log_warn "API Token 不能为空，请重新输入"
-        continue
-    fi
-
-    if [[ ${#V2BOARD_KEY} -lt 10 ]]; then
-        log_warn "API Token 看起来太短（少于10位），请确认是否正确"
-        echo -e "  ${YELLOW}输入 Y 继续使用，其他任意键重新输入：${NC}"
-        read -r -n 1 -p "  → " confirm
-        if [[ "$confirm" != "Y" && "$confirm" != "y" ]]; then
-            continue
-        fi
-    fi
-
-    break
-done
-
-echo ""
-echo -e "  ${GREEN}API Token 已记录: ${V2BOARD_KEY:0:8}****（已隐藏）${NC}"
-pause 1
-
-# 节点 ID
-while true; do
-    echo ""
-    echo -e "  ${BOLD}请输入节点 ID：${NC}"
-    echo -e "  ${YELLOW}面板后台 → 节点管理 → 查看节点 → NodeID（纯数字）${NC}"
+    echo -e "  ${BOLD}请输入第一条节点 ID：${NC}"
+    echo -e "  ${YELLOW}单协议时这就是该节点的 ID。双协议时这一条给 VLESS，另一条稍后填写。${NC}"
     read -r -p "  → " NODE_ID
 
     if [[ -z "$NODE_ID" ]]; then
@@ -467,37 +439,74 @@ collect_hysteria2_node_id() {
     echo -e "  ${GREEN}VLESS NodeID: ${NODE_ID}  |  Hysteria2 NodeID: ${HY2_NODE_ID}${NC}"
 }
 
-# [5] 的两条节点各用各的 ApiKey。[4] 继续用一开始输入的那一把。
-collect_hysteria2_api_key() {
+# 按协议写入各自的 ApiKey。other 非空且相同钥匙时，要明确输入 Y 才接受。
+collect_node_api_key() {
+    local label="$1"
+    local dest="$2"
+    local other="${3:-}"
+    local value=""
+    local confirm=""
+
     echo ""
-    echo -e "  ${YELLOW}Hysteria2 使用面板上该节点自己的 API Key，不要和 VLESS 共用同一条节点记录。${NC}"
-    echo ""
+    echo -e "  ${YELLOW}${label} 使用面板上该节点自己的 API Key。${NC}"
     while true; do
-        echo -e "  ${BOLD}请输入 Hysteria2 节点的 API Key：${NC}"
-        read -r -p "  → " HY2_API_KEY
-        if [[ -z "$HY2_API_KEY" ]]; then
+        echo ""
+        echo -e "  ${BOLD}请输入 ${label} 节点的 API Key：${NC}"
+        read -r -p "  → " value
+        if [[ -z "$value" ]]; then
             log_warn "API Key 不能为空"
             continue
         fi
-        if [[ "$HY2_API_KEY" == "$V2BOARD_KEY" ]]; then
-            log_warn "这把 Key 和 VLESS 相同。面板若给每条节点单独发了 Key，请改用 Hysteria2 那把。"
-            echo -e "  ${YELLOW}输入 Y 仍使用这一把，其他任意键重新输入：${NC}"
-            read -r -n 1 -p "  → " confirm
-            echo ""
-            if [[ "$confirm" != "Y" && "$confirm" != "y" ]]; then
+        if [[ ${#value} -lt 10 ]]; then
+            log_warn "API Key 看起来太短（少于10位），请确认是否正确"
+            echo -e "  ${YELLOW}输入 Y 继续使用，其他任意键重新输入：${NC}"
+            read -r -p "  → " confirm
+            if [[ "${confirm:0:1}" != "Y" && "${confirm:0:1}" != "y" ]]; then
                 continue
             fi
         fi
+        if [[ -n "$other" && "$value" == "$other" ]]; then
+            log_warn "这把 Key 和上一条节点相同。面板若给每条节点单独发了 Key，请改用 ${label} 那把。"
+            echo -e "  ${YELLOW}输入 Y 仍使用这一把，其他任意键重新输入：${NC}"
+            read -r -p "  → " confirm
+            if [[ "${confirm:0:1}" != "Y" && "${confirm:0:1}" != "y" ]]; then
+                continue
+            fi
+        fi
+        printf -v "$dest" '%s' "$value"
         break
     done
-    echo -e "  ${GREEN}Hysteria2 API Key 已记录: ${HY2_API_KEY:0:8}****${NC}"
+    echo -e "  ${GREEN}${label} API Key 已记录: ${value:0:8}****${NC}"
 }
 
-hy2_api_key() {
-    if $INSTALL_VLESS && $INSTALL_HY2 && [[ -n "${HY2_API_KEY:-}" ]]; then
-        printf '%s' "$HY2_API_KEY"
+# force 为 force 时重问当前协议。否则只补尚未填写的 Key。
+collect_selected_api_keys() {
+    local force="${1:-}"
+    if $INSTALL_VLESS && [[ "$force" == "force" || -z "${VLESS_API_KEY:-}" ]]; then
+        collect_node_api_key "VLESS" VLESS_API_KEY
+    fi
+    if $INSTALL_ANYTLS && [[ "$force" == "force" || -z "${ANYTLS_API_KEY:-}" ]]; then
+        if $INSTALL_VLESS; then
+            collect_node_api_key "AnyTLS" ANYTLS_API_KEY "${VLESS_API_KEY:-}"
+        else
+            collect_node_api_key "AnyTLS" ANYTLS_API_KEY
+        fi
+    fi
+    if $INSTALL_HY2 && [[ "$force" == "force" || -z "${HY2_API_KEY:-}" ]]; then
+        if $INSTALL_VLESS; then
+            collect_node_api_key "Hysteria2" HY2_API_KEY "${VLESS_API_KEY:-}"
+        else
+            collect_node_api_key "Hysteria2" HY2_API_KEY
+        fi
+    fi
+}
+
+mask_key() {
+    local value="${1:-}"
+    if [[ -z "$value" ]]; then
+        printf '%s' "(未填写)"
     else
-        printf '%s' "$V2BOARD_KEY"
+        printf '%s****' "${value:0:8}"
     fi
 }
 
@@ -573,7 +582,9 @@ KEY_FILE_PATH=""
 ANYTLS_FALLBACK=""
 ANYTLS_NODE_ID=$NODE_ID  # 默认复用主 NodeID
 HY2_NODE_ID=""           # 仅 [5] 使用；[4] 继续用 NODE_ID
-HY2_API_KEY=""           # 仅 [5] 使用；[4] 继续用 V2BOARD_KEY
+VLESS_API_KEY=""
+ANYTLS_API_KEY=""
+HY2_API_KEY=""
 
 # 双协议模式：面板上 VLESS 和 AnyTLS 是不同的节点，NodeID 不同
 if $INSTALL_VLESS && $INSTALL_ANYTLS; then
@@ -600,8 +611,9 @@ fi
 
 if $INSTALL_VLESS && $INSTALL_HY2; then
     collect_hysteria2_node_id
-    collect_hysteria2_api_key
 fi
+
+collect_selected_api_keys
 
 if $INSTALL_ANYTLS; then
     echo ""
@@ -881,18 +893,18 @@ pause 1
 # ---------------------------------------------------------------------------
 log_step "第三步：确认配置"
 
+while true; do
 echo ""
 echo -e "  ${BOLD}请确认以下配置信息：${NC}"
 echo ""
 echo -e "  ┌─────────────────────────────────────────────┐"
 echo -e "  │  面板地址:   ${GREEN}${V2BOARD_HOST}${NC}"
-echo -e "  │  API Token:  ${GREEN}${V2BOARD_KEY:0:8}************************${NC}"
 echo -e "  │  安装模式:   ${GREEN}${INSTALL_MODE}${NC}"
 if $INSTALL_VLESS; then
-echo -e "  │  🟢 VLESS 节点:  面板 NodeID ${NODE_ID}${NC}"
+echo -e "  │  🟢 VLESS:    NodeID ${NODE_ID}，Key $(mask_key "$VLESS_API_KEY")${NC}"
 fi
 if $INSTALL_ANYTLS; then
-echo -e "  │  🔵 AnyTLS 节点:  面板 NodeID ${ANYTLS_NODE_ID}${NC}"
+echo -e "  │  🔵 AnyTLS:   NodeID ${ANYTLS_NODE_ID}，Key $(mask_key "$ANYTLS_API_KEY")${NC}"
 echo -e "  │     域名:     ${GREEN}${DOMAIN_NAME}${NC}"
 if [[ "$CERT_MODE" == "http" ]]; then
 echo -e "  │     证书:     ${GREEN}HTTP 自动申请 (${CERT_EMAIL})${NC}"
@@ -901,7 +913,7 @@ echo -e "  │     证书:     ${GREEN}${CERT_FILE_PATH}${NC}"
 fi
 fi
 if $INSTALL_HY2; then
-echo -e "  │  🟣 Hysteria2: 面板 NodeID $(hy2_panel_id)，UDP + TLS${NC}"
+echo -e "  │  🟣 Hysteria2: NodeID $(hy2_panel_id)，Key $(mask_key "$HY2_API_KEY")${NC}"
 echo -e "  │     域名:     ${GREEN}${DOMAIN_NAME}${NC}"
 if [[ "$CERT_MODE" == "http" ]]; then
 echo -e "  │     证书:     ${GREEN}HTTP 自动申请 (${CERT_EMAIL})${NC}"
@@ -911,8 +923,6 @@ fi
 fi
 echo -e "  └─────────────────────────────────────────────┘"
 echo ""
-
-while true; do
     echo -e "  ${BOLD}以上信息是否正确？${NC}"
     echo -e "  ${GREEN}[Y]${NC} 确认安装   ${RED}[N]${NC} 取消   ${YELLOW}[R]${NC} 重新输入"
     read -r -n 1 -p "  → " confirm
@@ -926,11 +936,13 @@ while true; do
                     collect_hysteria2_node_id
                     continue
                 fi
-                if [[ -z "$HY2_API_KEY" ]]; then
-                    log_warn "Hysteria2 需要自己的 API Key"
-                    collect_hysteria2_api_key
-                    continue
-                fi
+            fi
+            if { $INSTALL_VLESS && [[ -z "$VLESS_API_KEY" ]]; } \
+                || { $INSTALL_ANYTLS && [[ -z "$ANYTLS_API_KEY" ]]; } \
+                || { $INSTALL_HY2 && [[ -z "$HY2_API_KEY" ]]; }; then
+                log_warn "还有节点的 API Key 没填"
+                collect_selected_api_keys
+                continue
             fi
             break
             ;;
@@ -938,7 +950,7 @@ while true; do
         R|r)
             echo ""
             echo -e "  ${YELLOW}需要重新输入哪个？${NC}"
-            echo -e "  [1] 面板地址  [2] API Token  [3] 节点 ID  [4] 协议选择"
+            echo -e "  [1] 面板地址  [2] 各协议 API Key  [3] 节点 ID  [4] 协议选择"
             read -r -n 1 -p "  → " redo
             echo ""
             case "$redo" in
@@ -947,8 +959,7 @@ while true; do
                     echo -e "  ${GREEN}已更新: ${V2BOARD_HOST}${NC}"
                     ;;
                 2)
-                    read -r -p "  新 API Token → " V2BOARD_KEY
-                    echo -e "  ${GREEN}已更新: ${V2BOARD_KEY:0:8}****${NC}"
+                    collect_selected_api_keys force
                     ;;
                 3)
                     while true; do
@@ -957,16 +968,33 @@ while true; do
                         log_warn "节点 ID 必须是纯数字"
                     done
                     echo -e "  ${GREEN}已更新: ${NODE_ID}${NC}"
+                    if $INSTALL_VLESS && $INSTALL_HY2 && [[ "$HY2_NODE_ID" == "$NODE_ID" ]]; then
+                        collect_hysteria2_node_id
+                    fi
                     ;;
                 4)
                     echo -e "  [1] VLESS+REALITY  [2] AnyTLS+TLS  [3] VLESS+AnyTLS  [4] Hysteria2  [5] VLESS+Hysteria2"
-                    echo -e "  ${YELLOW}这里只改协议标记。改到尚未填过证书的协议时，会补问域名和证书。${NC}"
+                    echo -e "  ${YELLOW}改到尚未填过的协议时，会补问该协议的 API Key、域名和证书。${NC}"
                     read -r -n 1 -p "  → " mode
                     echo ""
                     case "$mode" in
                         1) INSTALL_MODE="vless"; INSTALL_VLESS=true; INSTALL_ANYTLS=false; INSTALL_HY2=false ;;
                         2) INSTALL_MODE="anytls"; INSTALL_VLESS=false; INSTALL_ANYTLS=true; INSTALL_HY2=false ;;
-                        3) INSTALL_MODE="dual"; INSTALL_VLESS=true; INSTALL_ANYTLS=true; INSTALL_HY2=false ;;
+                        3)
+                            INSTALL_MODE="dual"
+                            INSTALL_VLESS=true
+                            INSTALL_ANYTLS=true
+                            INSTALL_HY2=false
+                            if [[ -z "$ANYTLS_NODE_ID" || "$ANYTLS_NODE_ID" == "$NODE_ID" ]]; then
+                                while true; do
+                                    read -r -p "  AnyTLS 节点 ID → " ANYTLS_NODE_ID
+                                    if [[ "$ANYTLS_NODE_ID" =~ ^[0-9]+$ && "$ANYTLS_NODE_ID" != "$NODE_ID" ]]; then
+                                        break
+                                    fi
+                                    log_warn "AnyTLS 节点 ID 必须是纯数字，且不能和 VLESS 相同"
+                                done
+                            fi
+                            ;;
                         4)
                             INSTALL_MODE="hysteria2"
                             INSTALL_VLESS=false
@@ -984,14 +1012,12 @@ while true; do
                             if [[ -z "$HY2_NODE_ID" || "$HY2_NODE_ID" == "$NODE_ID" ]]; then
                                 collect_hysteria2_node_id
                             fi
-                            if [[ -z "$HY2_API_KEY" ]]; then
-                                collect_hysteria2_api_key
-                            fi
                             if [[ -z "${CERT_MODE}" ]]; then
                                 collect_hysteria2_tls
                             fi
                             ;;
                     esac
+                    collect_selected_api_keys
                     echo -e "  ${GREEN}已更新: ${INSTALL_MODE}${NC}"
                     ;;
             esac
@@ -1208,7 +1234,7 @@ if $INSTALL_VLESS; then
   - PanelType: "V2board"
     ApiConfig:
       ApiHost: "$V2BOARD_HOST"
-      ApiKey: "$V2BOARD_KEY"
+      ApiKey: "$VLESS_API_KEY"
       NodeID: $NODE_ID
       NodeType: Vless
       Timeout: 30
@@ -1249,7 +1275,7 @@ if $INSTALL_ANYTLS; then
   - PanelType: "V2board"
     ApiConfig:
       ApiHost: "$V2BOARD_HOST"
-      ApiKey: "$V2BOARD_KEY"
+      ApiKey: "$ANYTLS_API_KEY"
       NodeID: $ANYTLS_NODE_ID
       NodeType: anytls
       Timeout: 30
@@ -1293,7 +1319,7 @@ if $INSTALL_HY2; then
   - PanelType: "V2board"
     ApiConfig:
       ApiHost: "$V2BOARD_HOST"
-      ApiKey: "$(hy2_api_key)"
+      ApiKey: "$HY2_API_KEY"
       NodeID: $(hy2_panel_id)
       NodeType: hysteria2
       Timeout: 30
@@ -1720,10 +1746,10 @@ echo -e "  ┌──────────────────────
 echo -e "  │  面板地址:   ${GREEN}${V2BOARD_HOST}${NC}"
 echo -e "  │  安装模式:   ${GREEN}${INSTALL_MODE}${NC}"
 if $INSTALL_VLESS; then
-echo -e "  │  🟢 VLESS:    面板 NodeID ${NODE_ID}, REALITY:443${NC}"
+echo -e "  │  🟢 VLESS:    NodeID ${NODE_ID}，Key $(mask_key "$VLESS_API_KEY")，REALITY:443${NC}"
 fi
 if $INSTALL_ANYTLS; then
-echo -e "  │  🔵 AnyTLS:   NodeID ${ANYTLS_NODE_ID}, 域名 ${GREEN}${DOMAIN_NAME}${NC}"
+echo -e "  │  🔵 AnyTLS:   NodeID ${ANYTLS_NODE_ID}，Key $(mask_key "$ANYTLS_API_KEY")，域名 ${GREEN}${DOMAIN_NAME}${NC}"
 if [[ "$CERT_MODE" == "http" ]]; then
 echo -e "  │     证书:     ${GREEN}HTTP 自动申请 (${CERT_EMAIL})${NC}"
 else
@@ -1736,7 +1762,7 @@ echo -e "  │     Fallback: ${RED}未配置（有指纹风险）${NC}"
 fi
 fi
 if $INSTALL_HY2; then
-echo -e "  │  🟣 Hysteria2: NodeID $(hy2_panel_id), UDP, 域名 ${GREEN}${DOMAIN_NAME}${NC}"
+echo -e "  │  🟣 Hysteria2: NodeID $(hy2_panel_id)，Key $(mask_key "$HY2_API_KEY")，UDP，域名 ${GREEN}${DOMAIN_NAME}${NC}"
 echo -e "  │     ALPN:      ${GREEN}h3${NC}    REALITY: ${GREEN}关闭${NC}"
 fi
 echo -e "  │  配置文件:   ${YELLOW}${XRAYR_INSTALL_DIR}/config.yml${NC}"

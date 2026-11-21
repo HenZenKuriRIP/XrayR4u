@@ -128,11 +128,11 @@ Hysteria2 删用户后，新连接会立刻失败。已经建立的 QUIC 会话�
 
 | 选项 | 行为 |
 |---|---|
-| `[1]` VLESS + REALITY | 与原来相同 |
-| `[2]` AnyTLS + TLS | 与原来相同 |
-| `[3]` VLESS + AnyTLS | 与原来相同 |
-| `[4]` Hysteria2 + TLS | 新机器上只写一条 `NodeType: hysteria2` |
-| `[5]` VLESS + Hysteria2 | 新机器上同时写两条。再单独输入 Hysteria2 的 NodeID 和 ApiKey |
+| `[1]` VLESS + REALITY | 只问 VLESS 的 API Key |
+| `[2]` AnyTLS + TLS | 只问 AnyTLS 的 API Key |
+| `[3]` VLESS + AnyTLS | 分别问 VLESS 和 AnyTLS 的 API Key |
+| `[4]` Hysteria2 + TLS | 新机器上只写一条 `NodeType: hysteria2`，只问 Hysteria2 的 API Key |
+| `[5]` VLESS + Hysteria2 | 新机器上同时写两条。分别输入两个 NodeID，以及 VLESS 和 Hysteria2 各自的 API Key |
 
 `[4]` 和 `[5]` 都会询问 Hysteria2 的域名和证书（已有文件，或 HTTP-01），并写入 `EnableReality: false`、`ALPN: ["h3"]`。混淆和 Brutal 保持关闭。`[5]` 里的 VLESS 仍是 REALITY，`CertMode: none`，不使用 Hysteria2 的证书。
 
